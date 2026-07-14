@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>도구리 레밍즈 - 2x2 스프라이트 격자 애니메이션 완결편</title>
+    <title>도구리 레밍즈 - 픽셀 마스크 애니메이션 완결편</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -23,17 +23,23 @@
         }
         .big-btn:hover { background: #ffcc00; color: #000; transform: scale(1.05); }
         
-        .map-list { display: flex; flex-wrap: wrap; gap: 15px; width: 850px; justify-content: center; margin: 20px 0; }
+        .map-list { display: flex; flex-wrap: wrap; gap: 15px; width: 960px; justify-content: center; margin: 20px 0; }
         .map-card {
             width: 380px; padding: 15px; background: #222; border: 2px solid #555;
             border-radius: 8px; text-align: left; cursor: pointer; transition: 0.2s;
         }
         .map-card:hover { border-color: #00ff66; background: #2a3a2a; transform: translateY(-2px); }
 
-        /* 캔버스 & UI 바 */
-        #gameCanvas, #editorCanvas {
-            border: 2px solid #555; background-color: #000; box-shadow: 0 8px 16px rgba(0,0,0,0.5); cursor: crosshair;
+        /* 캔버스 래퍼 (레이어 구조) */
+        .canvas-wrapper {
+            position: relative; width: 960px; height: 540px;
+            border: 2px solid #555; box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            background-color: #1a2a3a; /* 배경색 */
+            overflow: hidden; cursor: crosshair;
         }
+        .canvas-wrapper canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+        
+        /* UI 바 */
         .ui-bar {
             width: 960px; display: flex; justify-content: space-between; align-items: center;
             background: #222; padding: 10px 15px; box-sizing: border-box; border-radius: 8px;
@@ -62,23 +68,24 @@
         button:hover { background: #666; }
         button.back-btn { background: #b22222; }
         button.back-btn:hover { background: #dc143c; }
+        button.tool-btn.active { border: 2px solid #fff; box-shadow: 0 0 8px #fff; }
     </style>
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (2x2 스프라이트 격자 애니메이션 완결편)</h1>
+    <h1>🐶 도구리 레밍즈 (픽셀 마스크 충돌처리 완결편)</h1>
 
     <!-- 1. 로비 -->
     <div id="screen-lobby" class="screen active">
         <div class="menu-box">
             <button class="big-btn" onclick="showScreen('screen-select')">▶ 스테이지 선택</button>
-            <button class="big-btn" onclick="showScreen('screen-editor')">🛠️ 맵 에디터</button>
+            <button class="big-btn" onclick="showScreen('screen-editor')">🖌️ 픽셀 맵 에디터</button>
         </div>
     </div>
 
     <!-- 2. 스테이지 선택 -->
     <div id="screen-select" class="screen">
-        <h2>플레이할 스테이지를 선택하세요 (목표: 50마리 중 10마리 탈출)</h2>
+        <h2>플레이할 맵을 선택하세요 (목표: 50마리 중 10마리 탈출)</h2>
         <div id="mapContainer" class="map-list"></div>
         <button class="back-btn" onclick="showScreen('screen-lobby')" style="margin-top: 10px;">◀ 메인으로</button>
     </div>
@@ -92,250 +99,306 @@
             <div class="status-box">💀 사망: <span id="ui-dead" style="color:#ff4444;">0</span></div>
             <div class="status-box">🏃 탈출 성공: <span id="ui-saved">0</span> / 10</div>
         </div>
-        <canvas id="gameCanvas" width="960" height="540"></canvas>
+        
+        <!-- 레이어 분리: 배경 -> 실시간 파괴되는 지형 -> 캐릭터/오브젝트 -->
+        <div class="canvas-wrapper">
+            <canvas id="bgCanvas" width="480" height="270" style="z-index: 1;"></canvas>
+            <canvas id="terrainCanvas" width="480" height="270" style="z-index: 2;"></canvas>
+            <canvas id="gameCanvas" width="480" height="270" style="z-index: 3;"></canvas>
+        </div>
+        
         <div class="skill-panel" id="skillBar"></div>
     </div>
 
-    <!-- 4. 에디터 화면 -->
+    <!-- 4. 픽셀 에디터 화면 -->
     <div id="screen-editor" class="screen">
         <div class="ui-bar">
             <button class="back-btn" onclick="showScreen('screen-lobby')">◀ 메인으로</button>
             <div>
-                <button class="tool-btn active" onclick="setTool(1, this)" style="background:#8B4513;">🟫 벽(1)</button>
-                <button class="tool-btn" onclick="setTool(0, this)" style="background:#222;">⬛ 지우개(0)</button>
-                <button class="tool-btn" onclick="setTool(2, this)" style="background:#2e8b57;">🟢 입구(2)</button>
-                <button class="tool-btn" onclick="setTool(3, this)" style="background:#b22222;">🔴 출구(3)</button>
+                <button class="tool-btn active" onclick="setTool('brush', this)" style="background:#8B4513;">🖌️ 흙(벽) 칠하기</button>
+                <button class="tool-btn" onclick="setTool('eraser', this)" style="background:#222;">🧽 지우개</button>
+                <button class="tool-btn" onclick="setTool('spawn', this)" style="background:#2e8b57;">🟢 입구 찍기</button>
+                <button class="tool-btn" onclick="setTool('exit', this)" style="background:#b22222;">🔴 출구 찍기</button>
             </div>
             <div>
-                <button onclick="saveCustomMap()" style="background:#2e8b57;">💾 내 맵 저장</button>
-                <button onclick="clearEditor()">🗑️ 지우기</button>
+                <button onclick="savePixelMap()" style="background:#2e8b57;">💾 내 그림 저장</button>
+                <button onclick="clearEditor()">🗑️ 전체 지우기</button>
             </div>
         </div>
-        <canvas id="editorCanvas" width="960" height="540"></canvas>
+        <div class="canvas-wrapper">
+            <canvas id="editorCanvas" width="480" height="270"></canvas>
+            <canvas id="editorOverlay" width="480" height="270" style="pointer-events: none;"></canvas>
+        </div>
+        <p style="font-size: 13px; color: #aaa; margin-top: 10px;">마우스 드래그로 지형을 그리고, 입구와 출구를 클릭해 배치하세요. (게임에선 2배율로 렌더링됩니다)</p>
     </div>
 
     <script>
-        // 에디터는 30x30 타일 기준 (32 x 18 = 960 x 540)
-        const TILE_SIZE = 30;
-        const COLS = 32; 
-        const ROWS = 18;
-
-        // 게임 내부는 2x2 마이크로 픽셀 격자로 초정밀 분할! (480 x 270)
-        const SUB_DIV = 15;
-        const MICRO_SIZE = 2;
-        const MICRO_COLS = COLS * SUB_DIV; // 480
-        const MICRO_ROWS = ROWS * SUB_DIV; // 270
-
-        // --- [★ 도구리 캐릭터 2x2 격자 스프라이트 시트 로드 ★] ---
+        // --- [★ 시스템 상수 ★] ---
+        // 캔버스 자체를 480x270으로 생성하고 CSS로 960x540으로 늘려서 보여줍니다. (Pixel Perfect)
+        const CANVAS_W = 480; 
+        const CANVAS_H = 270;
+        
+        // 스프라이트 
         const dlWalkImg = new Image();
-        dlWalkImg.src = 'DL_Walk_1.png'; // 가로 2칸, 세로 2칸 (총 4컷) 스프라이트 이미지
+        dlWalkImg.src = 'DL_Walk_1.png';
         const TOTAL_FRAMES = 4;
 
-        // --- [1. 맵 압축 및 데이터 관리] ---
-        function compressMap(flatArray) {
-            let comp = [], count = 1;
-            for (let i = 1; i <= flatArray.length; i++) {
-                if (flatArray[i] === flatArray[i - 1]) count++;
-                else { comp.push((count > 1 ? count + "x" : "") + flatArray[i - 1]); count = 1; }
-            }
-            return comp.join(",");
-        }
-        function decompressMap(str) {
-            let flat = [];
-            str.split(",").forEach(item => {
-                if (item.includes("x")) { let [cnt, val] = item.split("x"); for(let i=0; i<Number(cnt); i++) flat.push(Number(val)); }
-                else flat.push(Number(item));
-            });
-            let m = []; for (let r=0; r<ROWS; r++) m.push(flat.slice(r*COLS, (r+1)*COLS)); return m;
-        }
-
+        // --- [1. 픽셀 기반 맵 데이터 구조] ---
+        let customMaps = JSON.parse(localStorage.getItem("doguri_pixel_maps") || "[]");
+        
+        // 기본 제공 튜토리얼 맵 (코드로 그리는 함수 활용)
         const defaultMaps = [
-            { 
-                name: "스테이지 1: 수직 땅파기와 계단 만들기", 
-                desc: "위층에서 수직파기(⛏️)로 내려간 뒤, 낭떠러지는 계단만들기(🪜)를 사용하여 출구로 연결하세요.",
-                data: "35x0,2,26x0,6x1,26x0,6x1,26x0,6x1,26x0,6x1,26x0,6x1,26x0,6x1,26x0,32x1,32x0,32x0,32x0,32x0,32x0,13x0,3,18x0,32x1,32x1" 
-            },
-            { 
-                name: "스테이지 2: 길막기와 시한폭탄 돌파!", 
-                desc: "앞장서는 친구를 길막기(🛑)로 세우고, 막힌 벽은 시한폭탄(💣)을 지정하여 5초 뒤 분화구를 내어 뚫으세요!",
-                data: "67x0,2,24x0,8x1,24x0,8x1,24x0,8x1,24x0,8x1,24x0,8x1,24x0,8x1,24x0,20x1,12x0,2x1,10x0,3,7x0,12x0,2x1,30x0,2x1,30x0,2x1,30x0,2x1" 
-            },
-            { 
-                name: "스테이지 3: 대각선 파기와 벽타기", 
-                desc: "지하 방에서 대각선파기(📐)로 계단형 굴을 만들고, 높은 벽은 벽타기(🧗)를 예약하여 위로 올라가세요.",
-                data: "32x0,10x1,12x0,10x1,1,3,8x1,2,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,10x1,1,11x0,10x1,32x1,32x1" 
-            },
-            { 
-                name: "스테이지 4: 정면 돌파와 낙하산", 
-                desc: "앞을 가로막는 두꺼운 벽을 정면파기(👊)로 터널처럼 뚫고, 낭떠러지에서는 낙하산(🪂)으로 살아서 하강하세요.",
-                data: "35x0,2,22x0,4x1,1,3x0,4x1,20x0,4x1,1,3x0,4x1,20x0,4x1,1,3x0,4x1,20x0,4x1,1,3x0,4x1,20x0,14x1,18x0,14x1,18x0,14x1,18x0,14x1,18x0,14x1,18x0,14x1,18x0,14x1,18x0,14x1,14x0,3,3x0,32x1" 
+            {
+                id: "stage_1",
+                name: "스테이지 1: 픽셀 터널 뚫기",
+                desc: "타일이 아닌 자유로운 픽셀 곡선 지형입니다. 정면파기와 수직파기를 활용하세요.",
+                isDefault: true,
+                spawns: [{x: 40, y: 50}], exits: [{x: 420, y: 220}]
             }
         ];
 
-        function getSavedMaps() { let s = localStorage.getItem("doguri_custom_maps_github"); return s ? JSON.parse(s) : []; }
+        function getMapList() { return [...defaultMaps, ...customMaps]; }
+
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             if (id === 'screen-select') loadMapList();
-            if (id === 'screen-editor') drawEditor();
+            if (id === 'screen-editor') initEditor();
         }
 
         function loadMapList() {
             const container = document.getElementById("mapContainer");
             container.innerHTML = "";
-            [...defaultMaps, ...getSavedMaps()].forEach(m => {
+            getMapList().forEach((m, idx) => {
                 let card = document.createElement("div"); card.className = "map-card";
                 card.innerHTML = `<h3 style="margin:0 0 8px 0; color:#ffcc00;">${m.name}</h3>
-                                  <p style="margin:0; font-size:13px; color:#ccc; line-height:1.4;">${m.desc || '사용자 커스텀 맵'}</p>`;
-                card.onclick = () => startGame(decompressMap(m.data));
+                                  <p style="margin:0; font-size:13px; color:#ccc; line-height:1.4;">${m.desc || '내가 직접 그린 커스텀 픽셀 맵'}</p>`;
+                card.onclick = () => loadStageData(m);
                 container.appendChild(card);
             });
         }
 
-        // --- [2. 맵 에디터] ---
-        const edCanvas = document.getElementById('editorCanvas'); const edCtx = edCanvas.getContext('2d');
-        let editorMap = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-        let currentTool = 1; let isDrawing = false;
-        const COLORS = { 0: '#111', 1: '#8B4513', 2: '#00FF00', 3: '#FF0000', 4: '#e67e22' };
+        // --- [2. 픽셀 에디터 로직 (Photoshop 스타일)] ---
+        const edCanvas = document.getElementById('editorCanvas'); 
+        const edCtx = edCanvas.getContext('2d', { willReadFrequently: true });
+        const ovCanvas = document.getElementById('editorOverlay');
+        const ovCtx = ovCanvas.getContext('2d');
+        
+        let editorSpawns = [];
+        let editorExits = [];
+        let currentTool = 'brush';
+        let isDrawing = false;
 
-        function drawEditor() {
-            edCtx.clearRect(0, 0, 960, 540);
-            for (let r=0; r<ROWS; r++) {
-                for (let c=0; c<COLS; c++) {
-                    edCtx.fillStyle = COLORS[editorMap[r][c]] || '#111';
-                    edCtx.fillRect(c*TILE_SIZE, r*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    edCtx.strokeStyle = '#222'; edCtx.strokeRect(c*TILE_SIZE, r*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    if (editorMap[r][c] === 2) { edCtx.fillStyle='#000'; edCtx.font="bold 12px Arial"; edCtx.fillText("IN", c*TILE_SIZE+8, r*TILE_SIZE+18); }
-                    if (editorMap[r][c] === 3) { edCtx.fillStyle='#FFF'; edCtx.font="bold 12px Arial"; edCtx.fillText("OUT", c*TILE_SIZE+5, r*TILE_SIZE+18); }
-                }
+        function initEditor() {
+            clearEditor();
+            setTool('brush', document.querySelector('.tool-btn'));
+        }
+
+        function setTool(t, btn) {
+            currentTool = t;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            // CSS는 960x540 이고 내부 캔버스는 480x270 이므로 비율을 맞춥니다.
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (evt.clientX - rect.left) * scaleX,
+                y: (evt.clientY - rect.top) * scaleY
+            };
+        }
+
+        edCanvas.addEventListener('mousedown', e => { 
+            isDrawing = true; 
+            handleEditorInput(e); 
+        });
+        edCanvas.addEventListener('mousemove', e => { 
+            if(isDrawing && (currentTool === 'brush' || currentTool === 'eraser')) {
+                handleEditorInput(e);
+            }
+        });
+        window.addEventListener('mouseup', () => isDrawing = false);
+
+        function handleEditorInput(e) {
+            const pos = getMousePos(edCanvas, e);
+            if (currentTool === 'brush') {
+                edCtx.globalCompositeOperation = 'source-over';
+                edCtx.fillStyle = '#8B4513';
+                edCtx.beginPath(); edCtx.arc(pos.x, pos.y, 8, 0, Math.PI * 2); edCtx.fill();
+            } else if (currentTool === 'eraser') {
+                edCtx.globalCompositeOperation = 'destination-out';
+                edCtx.beginPath(); edCtx.arc(pos.x, pos.y, 12, 0, Math.PI * 2); edCtx.fill();
+                edCtx.globalCompositeOperation = 'source-over';
+            } else if (currentTool === 'spawn' && e.type === 'mousedown') {
+                editorSpawns.push({x: pos.x, y: pos.y});
+                drawOverlay();
+            } else if (currentTool === 'exit' && e.type === 'mousedown') {
+                editorExits.push({x: pos.x, y: pos.y});
+                drawOverlay();
             }
         }
-        function setTool(t, btn) { currentTool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-        edCanvas.addEventListener('mousedown', e => { isDrawing = true; editMouse(e); });
-        edCanvas.addEventListener('mousemove', e => { if(isDrawing) editMouse(e); });
-        window.addEventListener('mouseup', () => isDrawing = false);
-        function editMouse(e) {
-            const rect = edCanvas.getBoundingClientRect();
-            const col = Math.floor((e.clientX - rect.left) / TILE_SIZE); const row = Math.floor((e.clientY - rect.top) / TILE_SIZE);
-            if (col >= 0 && col < COLS && row >= 0 && row < ROWS) { editorMap[row][col] = currentTool; drawEditor(); }
-        }
-        function clearEditor() { editorMap = Array.from({ length: ROWS }, () => Array(COLS).fill(0)); drawEditor(); }
-        function saveCustomMap() {
-            let flat = editorMap.flat();
-            if (!flat.includes(2) || !flat.includes(3)) { alert("🟢 입구와 🔴 출구를 최소 1개씩 찍어주세요!"); return; }
-            let name = prompt("맵 이름:", "내 야금야금 맵"); if (!name) return;
-            let list = getSavedMaps(); list.push({ name: name, desc: "커스텀 맵", data: compressMap(flat) });
-            localStorage.setItem("doguri_custom_maps_github", JSON.stringify(list));
-            alert("저장 완료!");
+
+        function drawOverlay() {
+            ovCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            ovCtx.font = "bold 10px Arial";
+            editorSpawns.forEach(p => {
+                ovCtx.fillStyle = "#00FF00"; ovCtx.beginPath(); ovCtx.arc(p.x, p.y, 6, 0, Math.PI*2); ovCtx.fill();
+                ovCtx.fillStyle = "#000"; ovCtx.fillText("IN", p.x-5, p.y+3);
+            });
+            editorExits.forEach(p => {
+                ovCtx.fillStyle = "#FF0000"; ovCtx.beginPath(); ovCtx.arc(p.x, p.y, 6, 0, Math.PI*2); ovCtx.fill();
+                ovCtx.fillStyle = "#FFF"; ovCtx.fillText("OUT", p.x-9, p.y+3);
+            });
         }
 
-        // --- [3. 게임 루프 & 스텝-업 이동 시스템] ---
+        function clearEditor() {
+            edCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            editorSpawns = []; editorExits = [];
+            drawOverlay();
+        }
+
+        function savePixelMap() {
+            if (editorSpawns.length === 0 || editorExits.length === 0) {
+                alert("🟢 입구와 🔴 출구를 최소 1개씩 찍어주세요!"); return;
+            }
+            let name = prompt("맵 이름:", "내 픽셀 아트 맵"); 
+            if (!name) return;
+            
+            // 캔버스에 그린 그림을 Base64 이미지 데이터로 추출 (투명도 포함 PNG)
+            const dataURL = edCanvas.toDataURL("image/png");
+            
+            customMaps.push({
+                id: "custom_" + Date.now(),
+                name: name,
+                imgData: dataURL,
+                spawns: editorSpawns,
+                exits: editorExits
+            });
+            localStorage.setItem("doguri_pixel_maps", JSON.stringify(customMaps));
+            alert("저장 완료!");
+            showScreen('screen-lobby');
+        }
+
+
+        // --- [3. 게임 루프 및 픽셀 파괴 시스템] ---
+        const tCanvas = document.getElementById('terrainCanvas'); const tCtx = tCanvas.getContext('2d', { willReadFrequently: true });
         const gCanvas = document.getElementById('gameCanvas'); const gCtx = gCanvas.getContext('2d');
-        let gameMap = []; let microMap = []; let lemmings = []; let spawnPoints = [];
+        const bCanvas = document.getElementById('bgCanvas'); const bCtx = bCanvas.getContext('2d');
+
+        let microMap = []; // 480x270 배열
+        let lemmings = [];
+        let currentStageInfo = null;
         let gameTimer, spawnTimer, loopTimer;
-        let timeLeft = 300; let spawnedCount = 0; let savedCount = 0; let deadCount = 0;
-        const MAX_SPAWN = 50; const WIN_TARGET = 10;
+        let timeLeft = 300, spawnedCount = 0, savedCount = 0, deadCount = 0;
+        const MAX_SPAWN = 50, WIN_TARGET = 10;
         let selectedSkill = 'digger';
 
         let skills = {
-            floater: { name: '🪂 낙하산', icon: '🪂', count: 20 },
-            climber: { name: '🧗 벽타기', icon: '🧗', count: 20 },
-            blocker: { name: '🛑 길막기', icon: '🛑', count: 20 },
-            bomber:  { name: '💣 폭탄(5초)', icon: '💣', count: 20 },
-            builder: { name: '🪜 계단만들기', icon: '🪜', count: 20 },
-            digger:  { name: '⛏️ 수직파기', icon: '⛏️', count: 20 },
-            basher:  { name: '👊 정면파기', icon: '👊', count: 20 },
-            miner:   { name: '📐 대각선파기', icon: '📐', count: 20 }
+            floater: { name: '🪂 낙하산', count: 20 }, climber: { name: '🧗 벽타기', count: 20 },
+            blocker: { name: '🛑 길막기', count: 20 }, bomber:  { name: '💣 폭탄(5초)', count: 20 },
+            builder: { name: '🪜 계단만들기', count: 20 }, digger:  { name: '⛏️ 수직파기', count: 20 },
+            basher:  { name: '👊 정면파기', count: 20 }, miner:   { name: '📐 대각선파기', count: 20 }
         };
 
         function initSkillBar() {
-            const panel = document.getElementById('skillBar');
-            panel.innerHTML = "";
+            const panel = document.getElementById('skillBar'); panel.innerHTML = "";
             for (let key in skills) {
-                let btn = document.createElement("div");
-                btn.className = `skill-btn ${selectedSkill === key ? 'active' : ''}`;
+                let btn = document.createElement("div"); btn.className = `skill-btn ${selectedSkill === key ? 'active' : ''}`;
                 btn.innerHTML = `${skills[key].name} <span id="skill-cnt-${key}">[${skills[key].count}회]</span>`;
-                btn.onclick = () => {
-                    selectedSkill = key;
-                    document.querySelectorAll('.skill-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                };
+                btn.onclick = () => { selectedSkill = key; document.querySelectorAll('.skill-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); };
                 panel.appendChild(btn);
             }
         }
-
         function updateSkillCountUI() {
-            for (let key in skills) {
-                let el = document.getElementById(`skill-cnt-${key}`);
-                if (el) el.innerText = `[${skills[key].count}회]`;
-            }
+            for (let key in skills) { let el = document.getElementById(`skill-cnt-${key}`); if (el) el.innerText = `[${skills[key].count}회]`; }
         }
 
-        function createMicroMap(map2D) {
-            let m = [];
-            for (let r = 0; r < MICRO_ROWS; r++) {
-                let row = [];
-                let tileR = Math.floor(r / SUB_DIV);
-                for (let c = 0; c < MICRO_COLS; c++) {
-                    let tileC = Math.floor(c / SUB_DIV);
-                    row.push(map2D[tileR][tileC]);
-                }
-                m.push(row);
-            }
-            return m;
-        }
-
+        // 마우스 클릭 (스킬 사용)
         gCanvas.addEventListener('mousedown', (e) => {
-            const rect = gCanvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
-
+            const pos = getMousePos(gCanvas, e);
             if (skills[selectedSkill].count <= 0) { alert("해당 스킬 횟수를 모두 소모했습니다!"); return; }
 
             for (let lem of lemmings) {
-                if (Math.hypot(lem.x - mouseX, lem.y - mouseY) < 20) {
+                if (Math.hypot(lem.x - pos.x, lem.y - pos.y) < 15) {
                     if (selectedSkill === 'floater' && !lem.isFloater) { lem.isFloater = true; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'climber' && !lem.isClimber) { lem.isClimber = true; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'blocker' && lem.state !== 'blocker') { lem.state = 'blocker'; lem.vx = 0; skills[selectedSkill].count--; }
-                    else if (selectedSkill === 'bomber' && !lem.isBomber) { 
-                        lem.isBomber = true; lem.bombTimer = 300; 
-                        skills[selectedSkill].count--; 
-                    }
+                    else if (selectedSkill === 'bomber' && !lem.isBomber) { lem.isBomber = true; lem.bombTimer = 300; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'builder' && lem.state !== 'building') { 
-                        lem.state = 'building'; lem.actionTimer = 0; lem.buildCount = 35; 
-                        lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing;
-                        skills[selectedSkill].count--; 
+                        lem.state = 'building'; lem.actionTimer = 0; lem.buildCount = 20; 
+                        lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing; skills[selectedSkill].count--; 
                     }
                     else if (selectedSkill === 'digger' && lem.state !== 'digging') { lem.state = 'digging'; lem.actionTimer = 0; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'basher' && lem.state !== 'bashing') { 
                         lem.state = 'bashing'; lem.actionTimer = 0; 
-                        lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing;
-                        skills[selectedSkill].count--; 
+                        lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing; skills[selectedSkill].count--; 
                     }
                     else if (selectedSkill === 'miner' && lem.state !== 'mining') { 
                         lem.state = 'mining'; lem.actionTimer = 0; 
-                        lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing;
-                        skills[selectedSkill].count--; 
+                        lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing; skills[selectedSkill].count--; 
                     }
-                    updateSkillCountUI();
-                    break;
+                    updateSkillCountUI(); break;
                 }
             }
         });
 
-        function startGame(map2D) {
-            gameMap = map2D; 
-            microMap = createMicroMap(map2D);
-            lemmings = []; spawnPoints = [];
-            timeLeft = 300; spawnedCount = 0; savedCount = 0; deadCount = 0;
+        // ★ 핵심: 이미지를 게임 맵(배열)로 스캔하는 과정 ★
+        function loadStageData(stageData) {
+            currentStageInfo = stageData;
             
+            // 캔버스 초기화
+            tCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            bCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            gCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+            if (stageData.isDefault) {
+                // 기본 맵 생성기 (외부 이미지가 없을 때를 위한 코드 드로잉)
+                tCtx.fillStyle = '#8B4513';
+                tCtx.beginPath(); tCtx.arc(100, 150, 60, 0, Math.PI*2); tCtx.fill();
+                tCtx.fillRect(100, 90, 200, 150);
+                tCtx.fillRect(300, 150, 100, 90);
+                tCtx.fillRect(20, 240, 440, 30);
+                scanTerrainToMap();
+                startEngine();
+            } else {
+                // 저장된 커스텀 픽셀 이미지 로드
+                const img = new Image();
+                img.onload = () => {
+                    tCtx.drawImage(img, 0, 0);
+                    scanTerrainToMap();
+                    startEngine();
+                };
+                img.src = stageData.imgData;
+            }
+        }
+
+        // 지형 캔버스에서 픽셀데이터(getImageData)를 뽑아와 충돌 마스크(microMap) 배열 생성
+        function scanTerrainToMap() {
+            microMap = Array.from({ length: CANVAS_H }, () => Array(CANVAS_W).fill(0));
+            const imgData = tCtx.getImageData(0, 0, CANVAS_W, CANVAS_H).data;
+            
+            for (let i = 0; i < CANVAS_W * CANVAS_H; i++) {
+                let r = Math.floor(i / CANVAS_W);
+                let c = i % CANVAS_W;
+                // 알파값(투명도)이 128 이상이면 벽(1)으로 인식
+                if (imgData[i * 4 + 3] > 128) {
+                    microMap[r][c] = 1;
+                }
+            }
+        }
+
+        function startEngine() {
+            lemmings = [];
+            timeLeft = 300; spawnedCount = 0; savedCount = 0; deadCount = 0;
             for (let k in skills) skills[k].count = 20;
             initSkillBar(); updateUI(); showScreen('screen-game');
 
-            for (let r=0; r<ROWS; r++) {
-                for (let c=0; c<COLS; c++) {
-                    if (gameMap[r][c] === 2) spawnPoints.push({x: c*TILE_SIZE + TILE_SIZE/2, y: r*TILE_SIZE + TILE_SIZE/2});
-                }
-            }
+            // 입구/출구 배경에 고정 렌더링
+            currentStageInfo.spawns.forEach(p => { bCtx.fillStyle="#00FF00"; bCtx.fillRect(p.x-10, p.y-10, 20, 20); bCtx.fillStyle="#000"; bCtx.fillText("IN", p.x-7, p.y+4); });
+            currentStageInfo.exits.forEach(p => { bCtx.fillStyle="#FF0000"; bCtx.fillRect(p.x-10, p.y-10, 20, 20); bCtx.fillStyle="#FFF"; bCtx.fillText("OUT", p.x-11, p.y+4); });
 
             gameTimer = setInterval(() => {
                 timeLeft--; updateUI();
@@ -343,13 +406,12 @@
             }, 1000);
 
             spawnTimer = setInterval(() => {
-                if (spawnedCount < MAX_SPAWN && spawnPoints.length > 0) {
-                    let sp = spawnPoints[spawnedCount % spawnPoints.length];
+                if (spawnedCount < MAX_SPAWN && currentStageInfo.spawns.length > 0) {
+                    let sp = currentStageInfo.spawns[spawnedCount % currentStageInfo.spawns.length];
                     lemmings.push({ 
-                        x: sp.x, y: sp.y, vx: 1.05, vy: 0, radius: 8, color: '#ffcc00',
+                        x: sp.x, y: sp.y, vx: 0.5, vy: 0, radius: 4, color: '#ffcc00',
                         state: 'walking', facing: 1, isFloater: false, isClimber: false, isBomber: false, 
-                        bombTimer: 0, fallDist: 0, actionTimer: 0,
-                        frame: 0, frameDelay: 0
+                        bombTimer: 0, fallDist: 0, actionTimer: 0, frame: 0, frameDelay: 0
                     });
                     spawnedCount++; updateUI();
                 }
@@ -371,191 +433,172 @@
             document.getElementById('ui-saved').innerText = savedCount;
         }
 
-        function isSolid(px, py) {
-            let mc = Math.floor(px / MICRO_SIZE); let mr = Math.floor(py / MICRO_SIZE);
-            if (mc < 0 || mc >= MICRO_COLS || mr >= MICRO_ROWS) return true;
-            if (mr < 0) return false;
-            let val = microMap[mr][mc];
-            return val === 1 || val === 4; 
+        function isSolid(x, y) {
+            let c = Math.floor(x); let r = Math.floor(y);
+            if (c < 0 || c >= CANVAS_W || r >= CANVAS_H) return true; // 화면 밖은 벽
+            if (r < 0) return false;
+            return microMap[r][c] === 1 || microMap[r][c] === 4; 
+        }
+
+        // 지형을 깎을 때 데이터 배열과 실제 캔버스 화면(Pixels)을 동시에 깎아냄
+        function carveTerrain(cx, cy, radius) {
+            let carved = false;
+            let startC = Math.max(0, cx - radius); let endC = Math.min(CANVAS_W - 1, cx + radius);
+            let startR = Math.max(0, cy - radius); let endR = Math.min(CANVAS_H - 1, cy + radius);
+            
+            for (let r = startR; r <= endR; r++) {
+                for (let c = startC; c <= endC; c++) {
+                    if (Math.hypot(c - cx, r - cy) <= radius && microMap[r][c] !== 0) {
+                        microMap[r][c] = 0; // 데이터 지움
+                        carved = true;
+                    }
+                }
+            }
+            if(carved) {
+                // 화면의 흙 지우기 (원형 브러시)
+                tCtx.globalCompositeOperation = 'destination-out';
+                tCtx.beginPath(); tCtx.arc(cx, cy, radius, 0, Math.PI * 2); tCtx.fill();
+                tCtx.globalCompositeOperation = 'source-over';
+            }
+            return carved;
+        }
+        
+        // 계단(픽셀) 생성
+        function buildTerrain(cx, cy, width, height) {
+            for(let r = cy; r < cy + height; r++) {
+                for(let c = cx; c < cx + width; c++) {
+                    if(r >= 0 && r < CANVAS_H && c >= 0 && c < CANVAS_W) {
+                        microMap[r][c] = 4; // 계단 데이터
+                        tCtx.fillStyle = '#e67e22';
+                        tCtx.fillRect(c, r, 1, 1); // 화면에 그리기
+                    }
+                }
+            }
         }
 
         function gameLoop() {
             gCtx.imageSmoothingEnabled = false; 
-            gCtx.clearRect(0, 0, 960, 540);
+            gCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-            // 1. 마이크로 격자 맵 렌더링
-            for (let r = 0; r < MICRO_ROWS; r++) {
-                let c = 0;
-                while (c < MICRO_COLS) {
-                    let val = microMap[r][c];
-                    if (val !== 0) {
-                        let startCol = c;
-                        while (c < MICRO_COLS && microMap[r][c] === val) c++;
-                        gCtx.fillStyle = COLORS[val] || '#fff';
-                        gCtx.fillRect(startCol * MICRO_SIZE, r * MICRO_SIZE, (c - startCol) * MICRO_SIZE, MICRO_SIZE);
-                    } else { c++; }
-                }
-            }
-            for (let r=0; r<ROWS; r++) {
-                for (let c=0; c<COLS; c++) {
-                    if (gameMap[r][c] === 2) { gCtx.fillStyle='#000'; gCtx.font="bold 12px Arial"; gCtx.fillText("IN", c*TILE_SIZE+8, r*TILE_SIZE+18); }
-                    if (gameMap[r][c] === 3) { gCtx.fillStyle='#FFF'; gCtx.font="bold 12px Arial"; gCtx.fillText("OUT", c*TILE_SIZE+5, r*TILE_SIZE+18); }
-                }
-            }
-
-            // 2. 레밍즈 AI 및 물리 연산
             for (let i = lemmings.length - 1; i >= 0; i--) {
                 let lem = lemmings[i];
-                let mc = Math.floor(lem.x / MICRO_SIZE);
-                let mr = Math.floor(lem.y / MICRO_SIZE);
-                let footMr = Math.floor((lem.y + lem.radius + 1) / MICRO_SIZE);
+                let footY = Math.floor(lem.y + lem.radius + 1);
 
+                // 탈출 판정
+                let escaped = false;
+                for(let ex of currentStageInfo.exits) {
+                    if (Math.hypot(lem.x - ex.x, lem.y - ex.y) < 15) {
+                        escaped = true; break;
+                    }
+                }
+                if(escaped) {
+                    lemmings.splice(i, 1); savedCount++; updateUI();
+                    if (savedCount >= WIN_TARGET) {
+                        stopGame();
+                        setTimeout(() => { alert("🎉 축하합니다! 10마리 이상 탈출하여 스테이지를 클리어했습니다!"); showScreen('screen-select'); }, 10);
+                        return;
+                    }
+                    continue;
+                }
+
+                // 폭탄 카운트다운
                 if (lem.isBomber) {
                     lem.bombTimer--;
                     if (lem.bombTimer <= 0) {
-                        let radiusMc = Math.floor(35 / MICRO_SIZE);
-                        for (let r = mr - radiusMc; r <= mr + radiusMc; r++) {
-                            for (let c = mc - radiusMc; c <= mc + radiusMc; c++) {
-                                if (r >= 0 && r < MICRO_ROWS && c >= 0 && c < MICRO_COLS) {
-                                    if (Math.hypot((c - mc) * MICRO_SIZE, (r - mr) * MICRO_SIZE) <= 35) {
-                                        if (microMap[r][c] === 1 || microMap[r][c] === 4) microMap[r][c] = 0;
-                                    }
-                                }
-                            }
-                        }
-                        gCtx.fillStyle = "#ff0000"; gCtx.font = "bold 20px Arial"; gCtx.fillText("💥쾅!", lem.x-15, lem.y);
+                        carveTerrain(Math.floor(lem.x), Math.floor(lem.y), 20); // 반경 20픽셀 펑!
+                        gCtx.fillStyle = "#ff0000"; gCtx.font = "bold 15px Arial"; gCtx.fillText("💥", lem.x-8, lem.y);
                         lemmings.splice(i, 1); deadCount++; updateUI(); continue;
                     }
                 }
 
+                // 상태별 로직 처리
                 if (lem.state === 'blocker') {
                     lem.vx = 0; lem.vy = 0;
                     for (let other of lemmings) {
-                        if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 16) other.vx *= -1;
+                        if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 8) other.vx *= -1;
                     }
                 }
                 else if (lem.state === 'building') {
                     lem.vx = 0; lem.vy = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 5) { 
+                    if (lem.actionTimer >= 10) { 
                         lem.actionTimer = 0;
-                        let stepMc = mc + lem.facing * 1;
-                        let stepMr = footMr - 1;
-                        if (lem.buildCount > 0 && stepMc >= 0 && stepMc < MICRO_COLS && stepMr >= 0 && stepMr < MICRO_ROWS) {
-                            if (!isSolid(stepMc * MICRO_SIZE, stepMr * MICRO_SIZE)) {
-                                for (let r = stepMr; r <= stepMr + 1; r++) {
-                                    for (let c = stepMc - 1; c <= stepMc + 1; c++) {
-                                        if (r >= 0 && r < MICRO_ROWS && c >= 0 && c < MICRO_COLS && microMap[r][c] === 0) {
-                                            microMap[r][c] = 4;
-                                        }
-                                    }
-                                }
-                                lem.x += lem.facing * MICRO_SIZE;
-                                lem.y -= MICRO_SIZE;
-                                lem.buildCount--;
-                            } else {
-                                lem.state = 'walking'; lem.vx = lem.facing * 1.05; 
-                            }
+                        let stepX = Math.floor(lem.x + lem.facing * 5);
+                        let stepY = footY - 2;
+                        
+                        if (lem.buildCount > 0 && !isSolid(stepX, stepY)) {
+                            // 가로 4px, 세로 2px 짜리 블록 생성
+                            buildTerrain((lem.facing > 0) ? stepX : stepX - 4, stepY, 4, 2);
+                            lem.x += lem.facing * 4; lem.y -= 2;
+                            lem.buildCount--;
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; 
+                            lem.state = 'walking'; lem.vx = lem.facing * 0.5; 
                         }
                     }
                 }
                 else if (lem.state === 'digging') {
                     lem.vx = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 24) { 
+                    if (lem.actionTimer >= 15) { 
                         lem.actionTimer = 0;
-                        let dug = false;
-                        if (footMr < MICRO_ROWS) {
-                            for (let c = mc - 4; c <= mc + 4; c++) {
-                                if (c >= 0 && c < MICRO_COLS && (microMap[footMr][c] === 1 || microMap[footMr][c] === 4)) {
-                                    microMap[footMr][c] = 0; dug = true;
-                                }
-                            }
-                        }
-                        if (dug) {
-                            lem.y += MICRO_SIZE; 
+                        if (carveTerrain(Math.floor(lem.x), footY + 2, 6)) {
+                            lem.y += 2; 
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; 
+                            lem.state = 'walking'; lem.vx = lem.facing * 0.5; 
                         }
                     }
                 }
                 else if (lem.state === 'bashing') {
                     lem.vy = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 20) {
+                    if (lem.actionTimer >= 10) {
                         lem.actionTimer = 0;
-                        let frontMc = Math.floor((lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2)) / MICRO_SIZE);
-                        let headMr = Math.floor((lem.y - lem.radius) / MICRO_SIZE);
-                        let dug = false;
-                        if (frontMc >= 0 && frontMc < MICRO_COLS) {
-                            for (let r = headMr; r <= footMr; r++) {
-                                if (r >= 0 && r < MICRO_ROWS && (microMap[r][frontMc] === 1 || microMap[r][frontMc] === 4)) {
-                                    microMap[r][frontMc] = 0; dug = true;
-                                }
-                            }
-                        }
-                        if (dug) {
-                            lem.x += lem.facing * MICRO_SIZE; 
+                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2));
+                        if (carveTerrain(frontX, Math.floor(lem.y), 6)) {
+                            lem.x += lem.facing * 2; 
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; 
+                            lem.state = 'walking'; lem.vx = lem.facing * 0.5; 
                         }
                     }
                 }
                 else if (lem.state === 'mining') {
                     lem.actionTimer++;
-                    if (lem.actionTimer >= 24) {
+                    if (lem.actionTimer >= 15) {
                         lem.actionTimer = 0;
-                        let targetMc = mc + lem.facing;
-                        let dug = false;
-                        if (footMr < MICRO_ROWS && targetMc >= 0 && targetMc < MICRO_COLS) {
-                            for (let r = footMr - 1; r <= footMr + 1; r++) {
-                                for (let c = targetMc - 2; c <= targetMc + 2; c++) {
-                                    if (r >= 0 && r < MICRO_ROWS && c >= 0 && c < MICRO_COLS && (microMap[r][c] === 1 || microMap[r][c] === 4)) {
-                                        microMap[r][c] = 0; dug = true;
-                                    }
-                                }
-                            }
-                        }
-                        if (dug) {
-                            lem.x += lem.facing * MICRO_SIZE;
-                            lem.y += MICRO_SIZE;
+                        let targetX = Math.floor(lem.x + lem.facing * 4);
+                        if (carveTerrain(targetX, footY + 2, 6)) {
+                            lem.x += lem.facing * 2; lem.y += 2;
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05;
+                            lem.state = 'walking'; lem.vx = lem.facing * 0.5;
                         }
                     }
                 }
                 else if (lem.state === 'climbing') {
-                    lem.vx = 0; lem.vy = -1.4; lem.y += lem.vy;
-                    let headMr = Math.floor((lem.y - lem.radius - 2) / MICRO_SIZE);
-                    let checkFrontMc = Math.floor((lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2)) / MICRO_SIZE);
-                    
-                    if (!isSolid(checkFrontMc * MICRO_SIZE, lem.y)) {
-                        lem.state = 'walking'; lem.vx = lem.facing * 1.05; lem.y -= 4; 
-                    } else if (isSolid(lem.x, headMr * MICRO_SIZE)) {
-                        lem.state = 'walking'; lem.vx = -lem.facing * 1.05; 
+                    lem.vx = 0; lem.vy = -0.7; lem.y += lem.vy;
+                    let checkFront = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
+                    if (!isSolid(checkFront, lem.y)) {
+                        lem.state = 'walking'; lem.vx = lem.facing * 0.5; lem.y -= 2; 
+                    } else if (isSolid(lem.x, lem.y - lem.radius - 2)) {
+                        lem.state = 'walking'; lem.vx = -lem.facing * 0.5; 
                     }
                 }
                 else {
-                    if (!isSolid(lem.x, lem.y + lem.radius + 1)) {
-                        lem.vy = lem.isFloater ? 1.05 : 2.8; 
+                    // 낙하 및 걷기 물리
+                    if (!isSolid(lem.x, footY)) {
+                        lem.vy = lem.isFloater ? 0.5 : 1.5; 
                         lem.y += lem.vy; lem.fallDist += lem.vy;
                     } else {
-                        if (!lem.isFloater && lem.fallDist > 270) {
+                        if (!lem.isFloater && lem.fallDist > 80) { // 치사량 조정 (해상도 비례)
                             gCtx.fillStyle = "#ff0000"; gCtx.fillText("💥", lem.x-5, lem.y);
                             lemmings.splice(i, 1); deadCount++; updateUI(); continue;
                         }
                         lem.vy = 0; lem.fallDist = 0;
-                        
                         if (lem.vx !== 0) lem.facing = lem.vx > 0 ? 1 : -1;
-                        let frontX = lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2);
+                        let frontX = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
                         
                         if (isSolid(frontX, lem.y)) {
                             let steppedUp = false;
-                            for (let stepUp = 2; stepUp <= 6; stepUp += 2) {
+                            // 부드러운 경사 오르기 (픽셀 기반)
+                            for (let stepUp = 1; stepUp <= 4; stepUp++) {
                                 if (!isSolid(frontX, lem.y - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) {
-                                    lem.y -= stepUp;
-                                    lem.x += lem.vx;
-                                    steppedUp = true;
-                                    break;
+                                    lem.y -= stepUp; lem.x += lem.vx; steppedUp = true; break;
                                 }
                             }
                             if (!steppedUp) {
@@ -568,83 +611,54 @@
                     }
                 }
 
-                if (mc >= 0 && mc < MICRO_COLS && mr >= 0 && mr < MICRO_ROWS && microMap[mr][mc] === 3) {
-                    lemmings.splice(i, 1); savedCount++; updateUI();
-                    if (savedCount >= WIN_TARGET) {
-                        stopGame();
-                        setTimeout(() => { alert("🎉 축하합니다! 10마리 이상 탈출하여 스테이지를 클리어했습니다!"); showScreen('screen-select'); }, 10);
-                        return;
-                    }
-                    continue;
-                }
-
-                // --- [★ 2x2 격자 스프라이트 애니메이션 렌더링 ★] ---
-                let imgSize = 30; 
+                // === 캐릭터 렌더링 ===
+                let imgSize = 16; 
                 if (dlWalkImg.complete && dlWalkImg.naturalWidth > 0) {
-                    // ★ 가로 2칸, 세로 2칸으로 나누어 정확한 1마리 프레임 너비와 높이 계산!
-                    let cols = 2;
-                    let rows = 2;
+                    let cols = 2; let rows = 2;
                     let frameWidth = dlWalkImg.naturalWidth / cols;
                     let frameHeight = dlWalkImg.naturalHeight / rows;
 
                     if (lem.state === 'walking' || lem.state === 'building' || lem.state === 'climbing') {
                         lem.frameDelay++;
                         if (lem.frameDelay >= 10) { 
-                            lem.frameDelay = 0;
-                            lem.frame = (lem.frame + 1) % TOTAL_FRAMES; // 0 -> 1 -> 2 -> 3 무한루프
+                            lem.frameDelay = 0; lem.frame = (lem.frame + 1) % TOTAL_FRAMES; 
                         }
                     }
 
-                    // ★ 현재 프레임(0~3)을 2x2 격자의 열(col)과 행(row) 인덱스로 매핑
-                    let col = lem.frame % cols;          // 0, 1, 0, 1
-                    let row = Math.floor(lem.frame / cols); // 0, 0, 1, 1
-                    let sX = col * frameWidth;
-                    let sY = row * frameHeight;
+                    let col = lem.frame % cols; let row = Math.floor(lem.frame / cols);
+                    let sX = col * frameWidth; let sY = row * frameHeight;
 
                     gCtx.save();
                     if (lem.facing < 0 || lem.vx < 0) {
-                        gCtx.translate(lem.x, lem.y);
-                        gCtx.scale(-1, 1);
-                        gCtx.drawImage(
-                            dlWalkImg, 
-                            sX, sY, frameWidth, frameHeight, 
-                            -imgSize / 2, -imgSize / 2, imgSize, imgSize
-                        );
+                        gCtx.translate(lem.x, lem.y); gCtx.scale(-1, 1);
+                        gCtx.drawImage(dlWalkImg, sX, sY, frameWidth, frameHeight, -imgSize / 2, -imgSize / 2, imgSize, imgSize);
                     } else {
-                        gCtx.drawImage(
-                            dlWalkImg, 
-                            sX, sY, frameWidth, frameHeight, 
-                            lem.x - imgSize / 2, lem.y - imgSize / 2, imgSize, imgSize
-                        );
+                        gCtx.drawImage(dlWalkImg, sX, sY, frameWidth, frameHeight, lem.x - imgSize / 2, lem.y - imgSize / 2, imgSize, imgSize);
                     }
                     gCtx.restore();
                 } else {
+                    // 이미지 없을 때 Fallback 동그라미
                     gCtx.beginPath(); gCtx.arc(lem.x, lem.y, lem.radius, 0, Math.PI * 2);
                     gCtx.fillStyle = lem.color; gCtx.fill();
                 }
 
+                // 상태 아이콘 렌더링
                 let icons = [];
-                if (lem.isFloater) icons.push("🪂");
-                if (lem.isClimber) icons.push("🧗");
-                if (lem.state === 'blocker') icons.push("🛑");
-                if (lem.state === 'building') icons.push("🪜");
-                if (lem.state === 'digging') icons.push("⛏️");
-                if (lem.state === 'bashing') icons.push("👊");
+                if (lem.isFloater) icons.push("🪂"); if (lem.isClimber) icons.push("🧗");
+                if (lem.state === 'blocker') icons.push("🛑"); if (lem.state === 'building') icons.push("🪜");
+                if (lem.state === 'digging') icons.push("⛏️"); if (lem.state === 'bashing') icons.push("👊");
                 if (lem.state === 'mining') icons.push("📐");
-
-                if (lem.isBomber) {
-                    let sec = Math.ceil(lem.bombTimer / 60);
-                    icons.push(`💣${sec}`);
-                }
+                if (lem.isBomber) icons.push(`💣${Math.ceil(lem.bombTimer / 60)}`);
 
                 if (icons.length > 0) {
-                    gCtx.font = "bold 11px Arial"; gCtx.fillStyle = lem.isBomber ? "#ffcc00" : "#fff";
-                    gCtx.fillText(icons.join(""), lem.x - (icons.length * 7), lem.y - 12);
+                    gCtx.font = "bold 9px Arial"; gCtx.fillStyle = lem.isBomber ? "#ffcc00" : "#fff";
+                    gCtx.fillText(icons.join(""), lem.x - (icons.length * 6), lem.y - 8);
                 }
-
-                if (lem.isFloater && lem.fallDist > 15) {
-                    gCtx.beginPath(); gCtx.arc(lem.x, lem.y - 10, 8, Math.PI, 0);
-                    gCtx.strokeStyle = '#fff'; gCtx.lineWidth = 2; gCtx.stroke();
+                
+                // 낙하산 시각 효과
+                if (lem.isFloater && lem.fallDist > 5) {
+                    gCtx.beginPath(); gCtx.arc(lem.x, lem.y - 6, 6, Math.PI, 0);
+                    gCtx.strokeStyle = '#fff'; gCtx.lineWidth = 1.5; gCtx.stroke();
                 }
             }
 
