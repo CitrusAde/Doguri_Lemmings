@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>도구리 레밍즈 - 2x2 픽셀 야금야금 & 폭탄 완결편</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>도구리 레밍즈 (Doguri Lemmings) - GitHub Edition</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -25,9 +26,9 @@
         .map-list { display: flex; flex-wrap: wrap; gap: 15px; width: 850px; justify-content: center; margin: 20px 0; }
         .map-card {
             width: 380px; padding: 15px; background: #222; border: 2px solid #555;
-            border-radius: 8px; text-align: left; cursor: pointer;
+            border-radius: 8px; text-align: left; cursor: pointer; transition: 0.2s;
         }
-        .map-card:hover { border-color: #00ff66; background: #2a3a2a; }
+        .map-card:hover { border-color: #00ff66; background: #2a3a2a; transform: translateY(-2px); }
 
         /* 캔버스 & UI 바 */
         #gameCanvas, #editorCanvas {
@@ -57,7 +58,7 @@
         .skill-btn span { font-size: 11px; margin-top: 2px; color: #aaa; }
         .skill-btn.active span { color: #333; font-weight: bold; }
         
-        button { padding: 8px 14px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; background: #444; color: #fff; }
+        button { padding: 8px 14px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; background: #444; color: #fff; transition: 0.2s; }
         button:hover { background: #666; }
         button.back-btn { background: #b22222; }
         button.back-btn:hover { background: #dc143c; }
@@ -65,7 +66,7 @@
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (2x2 마이크로 픽셀 & 계단/폭탄 완결편)</h1>
+    <h1>🐶 도구리 레밍즈 (2x2 마이크로 픽셀 & 스텝-업 이동 완결편)</h1>
 
     <!-- 1. 로비 -->
     <div id="screen-lobby" class="screen active">
@@ -114,7 +115,7 @@
     </div>
 
     <script>
-        // 에디터는 30x30 타일 기준 (32 x 18)
+        // 에디터는 30x30 타일 기준 (32 x 18 = 960 x 540)
         const TILE_SIZE = 30;
         const COLS = 32; 
         const ROWS = 18;
@@ -167,7 +168,7 @@
             }
         ];
 
-        function getSavedMaps() { let s = localStorage.getItem("doguri_custom_maps_v6"); return s ? JSON.parse(s) : []; }
+        function getSavedMaps() { let s = localStorage.getItem("doguri_custom_maps_github"); return s ? JSON.parse(s) : []; }
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
@@ -200,8 +201,8 @@
                     edCtx.fillStyle = COLORS[editorMap[r][c]] || '#111';
                     edCtx.fillRect(c*TILE_SIZE, r*TILE_SIZE, TILE_SIZE, TILE_SIZE);
                     edCtx.strokeStyle = '#222'; edCtx.strokeRect(c*TILE_SIZE, r*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    if (editorMap[r][c] === 2) { edCtx.fillStyle='#000'; edCtx.fillText("IN", c*TILE_SIZE+8, r*TILE_SIZE+18); }
-                    if (editorMap[r][c] === 3) { edCtx.fillStyle='#FFF'; edCtx.fillText("OUT", c*TILE_SIZE+5, r*TILE_SIZE+18); }
+                    if (editorMap[r][c] === 2) { edCtx.fillStyle='#000'; edCtx.font="bold 12px Arial"; edCtx.fillText("IN", c*TILE_SIZE+8, r*TILE_SIZE+18); }
+                    if (editorMap[r][c] === 3) { edCtx.fillStyle='#FFF'; edCtx.font="bold 12px Arial"; edCtx.fillText("OUT", c*TILE_SIZE+5, r*TILE_SIZE+18); }
                 }
             }
         }
@@ -220,11 +221,11 @@
             if (!flat.includes(2) || !flat.includes(3)) { alert("🟢 입구와 🔴 출구를 최소 1개씩 찍어주세요!"); return; }
             let name = prompt("맵 이름:", "내 야금야금 맵"); if (!name) return;
             let list = getSavedMaps(); list.push({ name: name, desc: "커스텀 맵", data: compressMap(flat) });
-            localStorage.setItem("doguri_custom_maps_v6", JSON.stringify(list));
+            localStorage.setItem("doguri_custom_maps_github", JSON.stringify(list));
             alert("저장 완료!");
         }
 
-        // --- [3. 게임 루프 & 2x2 마이크로 픽셀 시스템] ---
+        // --- [3. 게임 루프 & 2x2 마이크로 픽셀 및 스텝-업 이동 시스템] ---
         const gCanvas = document.getElementById('gameCanvas'); const gCtx = gCanvas.getContext('2d');
         let gameMap = []; let microMap = []; let lemmings = []; let spawnPoints = [];
         let gameTimer, spawnTimer, loopTimer;
@@ -232,7 +233,7 @@
         const MAX_SPAWN = 50; const WIN_TARGET = 10;
         let selectedSkill = 'digger';
 
-        // 스킬 정보 및 잔여 횟수 (계단만들기, 시한폭탄 추가!)
+        // 스킬 정보 및 잔여 횟수 (각 20회)
         let skills = {
             floater: { name: '🪂 낙하산', icon: '🪂', count: 20 },
             climber: { name: '🧗 벽타기', icon: '🧗', count: 20 },
@@ -293,11 +294,11 @@
                     else if (selectedSkill === 'climber' && !lem.isClimber) { lem.isClimber = true; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'blocker' && lem.state !== 'blocker') { lem.state = 'blocker'; lem.vx = 0; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'bomber' && !lem.isBomber) { 
-                        lem.isBomber = true; lem.bombTimer = 300; // 60프레임 * 5초 = 300
+                        lem.isBomber = true; lem.bombTimer = 300; 
                         skills[selectedSkill].count--; 
                     }
                     else if (selectedSkill === 'builder' && lem.state !== 'building') { 
-                        lem.state = 'building'; lem.actionTimer = 0; lem.buildCount = 30; // 30계단 (타일 2칸)
+                        lem.state = 'building'; lem.actionTimer = 0; lem.buildCount = 35; // 계단 35개 설치
                         lem.facing = (lem.vx !== 0) ? (lem.vx > 0 ? 1 : -1) : lem.facing;
                         skills[selectedSkill].count--; 
                     }
@@ -341,6 +342,7 @@
             spawnTimer = setInterval(() => {
                 if (spawnedCount < MAX_SPAWN && spawnPoints.length > 0) {
                     let sp = spawnPoints[spawnedCount % spawnPoints.length];
+                    // 속도 70% 감속 적용
                     lemmings.push({ 
                         x: sp.x, y: sp.y, vx: 1.05, vy: 0, radius: 8, color: '#ffcc00',
                         state: 'walking', facing: 1, isFloater: false, isClimber: false, isBomber: false, bombTimer: 0, fallDist: 0, actionTimer: 0
@@ -370,13 +372,13 @@
             if (mc < 0 || mc >= MICRO_COLS || mr >= MICRO_ROWS) return true;
             if (mr < 0) return false;
             let val = microMap[mr][mc];
-            return val === 1 || val === 4; // 1:벽, 4:계단만 밟거나 막히는 solid로 인식
+            return val === 1 || val === 4; // 1:벽, 4:계단
         }
 
         function gameLoop() {
             gCtx.clearRect(0, 0, 960, 540);
 
-            // 1. 마이크로 격자 맵 렌더링 (2x2 초정밀)
+            // 1. 마이크로 격자 맵 렌더링
             for (let r = 0; r < MICRO_ROWS; r++) {
                 let c = 0;
                 while (c < MICRO_COLS) {
@@ -396,18 +398,17 @@
                 }
             }
 
-            // 2. 레밍즈 AI 및 '2x2 야금야금 & 계단/폭탄' 물리 연산
+            // 2. 레밍즈 AI 및 '스텝-업(Step-up)' 물리 연산
             for (let i = lemmings.length - 1; i >= 0; i--) {
                 let lem = lemmings[i];
                 let mc = Math.floor(lem.x / MICRO_SIZE);
                 let mr = Math.floor(lem.y / MICRO_SIZE);
                 let footMr = Math.floor((lem.y + lem.radius + 1) / MICRO_SIZE);
 
-                // --- [시한폭탄 (Bomber) 타이머 및 폭발 처리] ---
+                // --- [시한폭탄 (Bomber)] ---
                 if (lem.isBomber) {
                     lem.bombTimer--;
                     if (lem.bombTimer <= 0) {
-                        // 반경 35픽셀 이내의 모든 마이크로 블록을 둥글게 분화구처럼 파괴!
                         let radiusMc = Math.floor(35 / MICRO_SIZE);
                         for (let r = mr - radiusMc; r <= mr + radiusMc; r++) {
                             for (let c = mc - radiusMc; c <= mc + radiusMc; c++) {
@@ -430,16 +431,16 @@
                         if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 16) other.vx *= -1;
                     }
                 }
-                // [상태: 계단 만들기 (Builder - 2x2 픽셀 계단을 대각선 위로 척척 설치!)]
+                // [상태: 계단 만들기 (Builder - 2x2 픽셀 계단 정밀 설치!)]
                 else if (lem.state === 'building') {
                     lem.vx = 0; lem.vy = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 6) { // 6프레임마다 1계단
+                    if (lem.actionTimer >= 5) { // 5프레임마다 1계단
                         lem.actionTimer = 0;
-                        let stepMc = mc + lem.facing * 2;
+                        let stepMc = mc + lem.facing * 1;
                         let stepMr = footMr - 1;
                         if (lem.buildCount > 0 && stepMc >= 0 && stepMc < MICRO_COLS && stepMr >= 0 && stepMr < MICRO_ROWS) {
                             if (!isSolid(stepMc * MICRO_SIZE, stepMr * MICRO_SIZE)) {
-                                // 2x2 크기(또는 3x2 크기) 계단 블록 생성 (색상: 4 주황색)
+                                // 2x2 계단 타일(4) 생성
                                 for (let r = stepMr; r <= stepMr + 1; r++) {
                                     for (let c = stepMc - 1; c <= stepMc + 1; c++) {
                                         if (r >= 0 && r < MICRO_ROWS && c >= 0 && c < MICRO_COLS && microMap[r][c] === 0) {
@@ -447,25 +448,25 @@
                                         }
                                     }
                                 }
-                                lem.x += lem.facing * (MICRO_SIZE * 1.5);
+                                // 계단을 밟고 위로 살짝 올라섬
+                                lem.x += lem.facing * MICRO_SIZE;
                                 lem.y -= MICRO_SIZE;
                                 lem.buildCount--;
                             } else {
-                                lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 천장/앞벽 막힘 시 걷기 복귀
+                                lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 천장이나 벽에 닿으면 즉시 걷기
                             }
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 30계단 완공 시 멈추지 않고 걷기 복귀!
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 완공 시 멈추지 않고 즉시 걷기
                         }
                     }
                 }
-                // [상태: 수직 파기 (Digger) - 파는 속도 2배 더 감속! (24프레임마다 2x2 픽셀 파기)]
+                // [상태: 수직 파기 (Digger - 파기 속도 2배 더 감속!)]
                 else if (lem.state === 'digging') {
                     lem.vx = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 24) { 
+                    if (lem.actionTimer >= 24) { // 24프레임마다 2x2 파기
                         lem.actionTimer = 0;
                         let dug = false;
                         if (footMr < MICRO_ROWS) {
-                            // 몸통 너비(8칸 = 16px)만큼 2x2 픽셀 블록 제거
                             for (let c = mc - 4; c <= mc + 4; c++) {
                                 if (c >= 0 && c < MICRO_COLS && (microMap[footMr][c] === 1 || microMap[footMr][c] === 4)) {
                                     microMap[footMr][c] = 0; dug = true;
@@ -475,11 +476,11 @@
                         if (dug) {
                             lem.y += MICRO_SIZE; 
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 다 파면 절대 멈추지 않고 걷기 복귀!
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 다 파면 절대 멈추지 않고 걷기
                         }
                     }
                 }
-                // [상태: 정면 파기 (Basher) - 파는 속도 2배 더 감속! (20프레임마다 2x2 픽셀 파기)]
+                // [상태: 정면 파기 (Basher - 파기 속도 2배 더 감속!)]
                 else if (lem.state === 'bashing') {
                     lem.vy = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 20) {
@@ -497,11 +498,11 @@
                         if (dug) {
                             lem.x += lem.facing * MICRO_SIZE; 
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 앞이 공허가 되면 멈추지 않고 걷기 복귀!
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; 
                         }
                     }
                 }
-                // [상태: 대각선 아래 파기 (Miner) - 파는 속도 2배 더 감속! (24프레임마다 2x2 픽셀 파기)]
+                // [상태: 대각선 아래 파기 (Miner - 파기 속도 2배 더 감속!)]
                 else if (lem.state === 'mining') {
                     lem.actionTimer++;
                     if (lem.actionTimer >= 24) {
@@ -521,7 +522,7 @@
                             lem.x += lem.facing * MICRO_SIZE;
                             lem.y += MICRO_SIZE;
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 1.05; // 다 파면 멈추지 않고 걷기 복귀!
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.05;
                         }
                     }
                 }
@@ -537,13 +538,13 @@
                         lem.state = 'walking'; lem.vx = -lem.facing * 1.05; 
                     }
                 }
-                // [상태: 기본 걷기 및 떨어지기 (Walking / Falling)]
+                // [상태: 기본 걷기 / 떨어지기 & 슬로프 스텝-업 (Walking / Falling)]
                 else {
                     if (!isSolid(lem.x, lem.y + lem.radius + 1)) {
                         lem.vy = lem.isFloater ? 1.05 : 2.8; 
                         lem.y += lem.vy; lem.fallDist += lem.vy;
                     } else {
-                        // 낙사 기준: 맵 높이의 절반 270px 이상 추락 시 사망
+                        // 낙사 270px (맵 높이의 정확히 절반)
                         if (!lem.isFloater && lem.fallDist > 270) {
                             gCtx.fillStyle = "#ff0000"; gCtx.fillText("💥", lem.x-5, lem.y);
                             lemmings.splice(i, 1); deadCount++; updateUI(); continue;
@@ -554,8 +555,21 @@
                         let frontX = lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2);
                         
                         if (isSolid(frontX, lem.y)) {
-                            if (lem.isClimber) lem.state = 'climbing'; 
-                            else lem.vx *= -1; 
+                            // --- [🚀 슬로프 스텝-업 (Slope Step-Up) 기능!] ---
+                            // 앞이 막혔더라도, 발 앞 2px~6px (최대 3칸) 높이가 뚫려있으면 타고 올라감 (계단 & 분화구 이동 완벽 해결)
+                            let steppedUp = false;
+                            for (let stepUp = 2; stepUp <= 6; stepUp += 2) {
+                                if (!isSolid(frontX, lem.y - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) {
+                                    lem.y -= stepUp;
+                                    lem.x += lem.vx;
+                                    steppedUp = true;
+                                    break;
+                                }
+                            }
+                            if (!steppedUp) {
+                                if (lem.isClimber) lem.state = 'climbing'; 
+                                else lem.vx *= -1; // 6px보다 높은 진짜 벽일 때만 뒤돌기
+                            }
                         } else {
                             lem.x += lem.vx;
                         }
@@ -573,7 +587,7 @@
                     continue;
                 }
 
-                // --- [캐릭터 렌더링 & 스킬/폭탄 타이머 아이콘 지속 표시] ---
+                // --- [캐릭터 렌더링 & 지속되는 스킬 아이콘 표시] ---
                 gCtx.beginPath(); gCtx.arc(lem.x, lem.y, lem.radius, 0, Math.PI * 2);
                 gCtx.fillStyle = lem.color; gCtx.fill();
                 
@@ -589,7 +603,6 @@
                 if (lem.state === 'bashing') icons.push("👊");
                 if (lem.state === 'mining') icons.push("📐");
 
-                // 시한폭탄 카운트다운 표시 (5 -> 4 -> 3 -> 2 -> 1)
                 if (lem.isBomber) {
                     let sec = Math.ceil(lem.bombTimer / 60);
                     icons.push(`💣${sec}`);
