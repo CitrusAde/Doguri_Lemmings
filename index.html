@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>도구리 레밍즈 (Doguri Lemmings) - 픽셀 스프라이트 적용 편</title>
+    <title>도구리 레밍즈 - 2x2 스프라이트 격자 애니메이션 완결편</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -66,7 +66,7 @@
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (DL_Walk_1 스프라이트 및 반전 적용편)</h1>
+    <h1>🐶 도구리 레밍즈 (2x2 스프라이트 격자 애니메이션 완결편)</h1>
 
     <!-- 1. 로비 -->
     <div id="screen-lobby" class="screen active">
@@ -126,9 +126,10 @@
         const MICRO_COLS = COLS * SUB_DIV; // 480
         const MICRO_ROWS = ROWS * SUB_DIV; // 270
 
-        // --- [★ 도구리 캐릭터 걷기 스프라이트 로드 ★] ---
+        // --- [★ 도구리 캐릭터 2x2 격자 스프라이트 시트 로드 ★] ---
         const dlWalkImg = new Image();
-        dlWalkImg.src = 'DL_Walk_1.png'; // 오른쪽을 바라보는 걷기 스프라이트 원본
+        dlWalkImg.src = 'DL_Walk_1.png'; // 가로 2칸, 세로 2칸 (총 4컷) 스프라이트 이미지
+        const TOTAL_FRAMES = 4;
 
         // --- [1. 맵 압축 및 데이터 관리] ---
         function compressMap(flatArray) {
@@ -346,7 +347,9 @@
                     let sp = spawnPoints[spawnedCount % spawnPoints.length];
                     lemmings.push({ 
                         x: sp.x, y: sp.y, vx: 1.05, vy: 0, radius: 8, color: '#ffcc00',
-                        state: 'walking', facing: 1, isFloater: false, isClimber: false, isBomber: false, bombTimer: 0, fallDist: 0, actionTimer: 0
+                        state: 'walking', facing: 1, isFloater: false, isClimber: false, isBomber: false, 
+                        bombTimer: 0, fallDist: 0, actionTimer: 0,
+                        frame: 0, frameDelay: 0
                     });
                     spawnedCount++; updateUI();
                 }
@@ -377,8 +380,7 @@
         }
 
         function gameLoop() {
-            // 픽셀 아트 선명도 유지 옵션 (도트 뭉개짐 방지)
-            gCtx.imageSmoothingEnabled = false;
+            gCtx.imageSmoothingEnabled = false; 
             gCtx.clearRect(0, 0, 960, 540);
 
             // 1. 마이크로 격자 맵 렌더링
@@ -401,14 +403,13 @@
                 }
             }
 
-            // 2. 레밍즈 AI 및 '스텝-업(Step-up)' 물리 연산
+            // 2. 레밍즈 AI 및 물리 연산
             for (let i = lemmings.length - 1; i >= 0; i--) {
                 let lem = lemmings[i];
                 let mc = Math.floor(lem.x / MICRO_SIZE);
                 let mr = Math.floor(lem.y / MICRO_SIZE);
                 let footMr = Math.floor((lem.y + lem.radius + 1) / MICRO_SIZE);
 
-                // --- [시한폭탄 (Bomber)] ---
                 if (lem.isBomber) {
                     lem.bombTimer--;
                     if (lem.bombTimer <= 0) {
@@ -427,14 +428,12 @@
                     }
                 }
 
-                // [상태: 길막기 (Blocker)]
                 if (lem.state === 'blocker') {
                     lem.vx = 0; lem.vy = 0;
                     for (let other of lemmings) {
                         if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 16) other.vx *= -1;
                     }
                 }
-                // [상태: 계단 만들기 (Builder)]
                 else if (lem.state === 'building') {
                     lem.vx = 0; lem.vy = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 5) { 
@@ -461,7 +460,6 @@
                         }
                     }
                 }
-                // [상태: 수직 파기 (Digger)]
                 else if (lem.state === 'digging') {
                     lem.vx = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 24) { 
@@ -481,7 +479,6 @@
                         }
                     }
                 }
-                // [상태: 정면 파기 (Basher)]
                 else if (lem.state === 'bashing') {
                     lem.vy = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 20) {
@@ -503,7 +500,6 @@
                         }
                     }
                 }
-                // [상태: 대각선 아래 파기 (Miner)]
                 else if (lem.state === 'mining') {
                     lem.actionTimer++;
                     if (lem.actionTimer >= 24) {
@@ -527,7 +523,6 @@
                         }
                     }
                 }
-                // [상태: 벽타기 (Climber 액티브)]
                 else if (lem.state === 'climbing') {
                     lem.vx = 0; lem.vy = -1.4; lem.y += lem.vy;
                     let headMr = Math.floor((lem.y - lem.radius - 2) / MICRO_SIZE);
@@ -539,7 +534,6 @@
                         lem.state = 'walking'; lem.vx = -lem.facing * 1.05; 
                     }
                 }
-                // [상태: 기본 걷기 / 떨어지기 & 슬로프 스텝-업 (Walking / Falling)]
                 else {
                     if (!isSolid(lem.x, lem.y + lem.radius + 1)) {
                         lem.vy = lem.isFloater ? 1.05 : 2.8; 
@@ -555,7 +549,6 @@
                         let frontX = lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2);
                         
                         if (isSolid(frontX, lem.y)) {
-                            // 🚀 6px 이하의 낮은 턱이나 계단, 분화구는 부드럽게 타고 올라감!
                             let steppedUp = false;
                             for (let stepUp = 2; stepUp <= 6; stepUp += 2) {
                                 if (!isSolid(frontX, lem.y - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) {
@@ -575,7 +568,6 @@
                     }
                 }
 
-                // [출구 도착 판정]
                 if (mc >= 0 && mc < MICRO_COLS && mr >= 0 && mr < MICRO_ROWS && microMap[mr][mc] === 3) {
                     lemmings.splice(i, 1); savedCount++; updateUI();
                     if (savedCount >= WIN_TARGET) {
@@ -586,22 +578,47 @@
                     continue;
                 }
 
-                // --- [★ 도구리 캐릭터 걷기 스프라이트 & 반전 출력 ★] ---
-                let imgSize = 20; // 2x2 스프라이트 크기 (20x20px 권장)
+                // --- [★ 2x2 격자 스프라이트 애니메이션 렌더링 ★] ---
+                let imgSize = 20; 
                 if (dlWalkImg.complete && dlWalkImg.naturalWidth > 0) {
+                    // ★ 가로 2칸, 세로 2칸으로 나누어 정확한 1마리 프레임 너비와 높이 계산!
+                    let cols = 2;
+                    let rows = 2;
+                    let frameWidth = dlWalkImg.naturalWidth / cols;
+                    let frameHeight = dlWalkImg.naturalHeight / rows;
+
+                    if (lem.state === 'walking' || lem.state === 'building' || lem.state === 'climbing') {
+                        lem.frameDelay++;
+                        if (lem.frameDelay >= 10) { 
+                            lem.frameDelay = 0;
+                            lem.frame = (lem.frame + 1) % TOTAL_FRAMES; // 0 -> 1 -> 2 -> 3 무한루프
+                        }
+                    }
+
+                    // ★ 현재 프레임(0~3)을 2x2 격자의 열(col)과 행(row) 인덱스로 매핑
+                    let col = lem.frame % cols;          // 0, 1, 0, 1
+                    let row = Math.floor(lem.frame / cols); // 0, 0, 1, 1
+                    let sX = col * frameWidth;
+                    let sY = row * frameHeight;
+
                     gCtx.save();
                     if (lem.facing < 0 || lem.vx < 0) {
-                        // 왼쪽으로 갈 때: 임시 중심 원점 이동 후 가로 반전(-1, 1) 적용!
                         gCtx.translate(lem.x, lem.y);
                         gCtx.scale(-1, 1);
-                        gCtx.drawImage(dlWalkImg, -imgSize / 2, -imgSize / 2, imgSize, imgSize);
+                        gCtx.drawImage(
+                            dlWalkImg, 
+                            sX, sY, frameWidth, frameHeight, 
+                            -imgSize / 2, -imgSize / 2, imgSize, imgSize
+                        );
                     } else {
-                        // 오른쪽으로 갈 때: 원본 그대로 출력!
-                        gCtx.drawImage(dlWalkImg, lem.x - imgSize / 2, lem.y - imgSize / 2, imgSize, imgSize);
+                        gCtx.drawImage(
+                            dlWalkImg, 
+                            sX, sY, frameWidth, frameHeight, 
+                            lem.x - imgSize / 2, lem.y - imgSize / 2, imgSize, imgSize
+                        );
                     }
                     gCtx.restore();
                 } else {
-                    // 이미지가 아직 안 불러와졌거나 없을 때는 기존 노란색 원 출력 (백업)
                     gCtx.beginPath(); gCtx.arc(lem.x, lem.y, lem.radius, 0, Math.PI * 2);
                     gCtx.fillStyle = lem.color; gCtx.fill();
                 }
