@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>도구리 레밍즈 - 픽셀 마스크 애니메이션 완결편</title>
+    <title>도구리 레밍즈 - 1280x720 HD 완결편</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -23,25 +23,25 @@
         }
         .big-btn:hover { background: #ffcc00; color: #000; transform: scale(1.05); }
         
-        .map-list { display: flex; flex-wrap: wrap; gap: 15px; width: 960px; justify-content: center; margin: 20px 0; }
+        .map-list { display: flex; flex-wrap: wrap; gap: 15px; width: 1280px; justify-content: center; margin: 20px 0; }
         .map-card {
             width: 380px; padding: 15px; background: #222; border: 2px solid #555;
             border-radius: 8px; text-align: left; cursor: pointer; transition: 0.2s;
         }
         .map-card:hover { border-color: #00ff66; background: #2a3a2a; transform: translateY(-2px); }
 
-        /* 캔버스 래퍼 (레이어 구조) */
+        /* 캔버스 래퍼 (1280x720 해상도) */
         .canvas-wrapper {
-            position: relative; width: 960px; height: 540px;
+            position: relative; width: 1280px; height: 720px;
             border: 2px solid #555; box-shadow: 0 8px 16px rgba(0,0,0,0.5);
-            background-color: #1a2a3a; /* 배경색 */
+            background-color: #1a2a3a;
             overflow: hidden; cursor: crosshair;
         }
         .canvas-wrapper canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; image-rendering: pixelated; }
         
         /* UI 바 */
         .ui-bar {
-            width: 960px; display: flex; justify-content: space-between; align-items: center;
+            width: 1280px; display: flex; justify-content: space-between; align-items: center;
             background: #222; padding: 10px 15px; box-sizing: border-box; border-radius: 8px;
             margin-bottom: 8px; border: 1px solid #444;
         }
@@ -50,7 +50,7 @@
         
         /* 스킬 바 */
         .skill-panel {
-            width: 960px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+            width: 1280px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
             background: #1a1a1a; padding: 8px; box-sizing: border-box; border-radius: 8px;
             margin-top: 8px; border: 1px solid #444;
         }
@@ -73,7 +73,7 @@
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (픽셀 마스크 충돌처리 완결편)</h1>
+    <h1>🐶 도구리 레밍즈 (1280x720 HD 픽셀 마스크 에디션)</h1>
 
     <!-- 1. 로비 -->
     <div id="screen-lobby" class="screen active">
@@ -102,9 +102,9 @@
         
         <!-- 레이어 분리: 배경 -> 실시간 파괴되는 지형 -> 캐릭터/오브젝트 -->
         <div class="canvas-wrapper">
-            <canvas id="bgCanvas" width="480" height="270" style="z-index: 1;"></canvas>
-            <canvas id="terrainCanvas" width="480" height="270" style="z-index: 2;"></canvas>
-            <canvas id="gameCanvas" width="480" height="270" style="z-index: 3;"></canvas>
+            <canvas id="bgCanvas" width="1280" height="720" style="z-index: 1;"></canvas>
+            <canvas id="terrainCanvas" width="1280" height="720" style="z-index: 2;"></canvas>
+            <canvas id="gameCanvas" width="1280" height="720" style="z-index: 3;"></canvas>
         </div>
         
         <div class="skill-panel" id="skillBar"></div>
@@ -126,17 +126,16 @@
             </div>
         </div>
         <div class="canvas-wrapper">
-            <canvas id="editorCanvas" width="480" height="270"></canvas>
-            <canvas id="editorOverlay" width="480" height="270" style="pointer-events: none;"></canvas>
+            <canvas id="editorCanvas" width="1280" height="720"></canvas>
+            <canvas id="editorOverlay" width="1280" height="720" style="pointer-events: none;"></canvas>
         </div>
-        <p style="font-size: 13px; color: #aaa; margin-top: 10px;">마우스 드래그로 지형을 그리고, 입구와 출구를 클릭해 배치하세요. (게임에선 2배율로 렌더링됩니다)</p>
+        <p style="font-size: 13px; color: #aaa; margin-top: 10px;">마우스 드래그로 지형을 그리고, 입구와 출구를 클릭해 배치하세요.</p>
     </div>
 
     <script>
         // --- [★ 시스템 상수 ★] ---
-        // 캔버스 자체를 480x270으로 생성하고 CSS로 960x540으로 늘려서 보여줍니다. (Pixel Perfect)
-        const CANVAS_W = 480; 
-        const CANVAS_H = 270;
+        const CANVAS_W = 1280; 
+        const CANVAS_H = 720;
         
         // 스프라이트 
         const dlWalkImg = new Image();
@@ -146,24 +145,24 @@
         // --- [1. 픽셀 기반 맵 데이터 구조] ---
         let customMaps = JSON.parse(localStorage.getItem("doguri_pixel_maps") || "[]");
         
-        // 기본 제공 튜토리얼 맵 (코드로 그리는 함수 활용)
-const defaultMaps = [
-    {
-        id: "stage_1",
-        name: "스테이지 1: 픽셀 터널 뚫기",
-        // ... (생략) ...
-        spawns: [{x: 40, y: 50}], exits: [{x: 420, y: 220}]
-    }, // <-- ★ 여기 콤마(,)가 꼭 있어야 합니다!
-    {
-        id: "test_map_1",
-        name: "테스트 스테이지: 내 PNG 맵",
-        desc: "DL_Test_Map_1.png 이미지를 활용한 커스텀 지형입니다.",
-        isDefault: false,
-        imgData: "DL_Test_Map_1.png", 
-        spawns: [{x: 50, y: 50}], 
-        exits: [{x: 430, y: 230}] 
-    }
-];
+        const defaultMaps = [
+            {
+                id: "stage_1",
+                name: "스테이지 1: 픽셀 터널 뚫기",
+                desc: "타일이 아닌 자유로운 픽셀 곡선 지형입니다. 정면파기와 수직파기를 활용하세요.",
+                isDefault: true,
+                spawns: [{x: 100, y: 100}], exits: [{x: 1100, y: 600}]
+            },
+            {
+                id: "test_map_1",
+                name: "테스트 스테이지: 내 PNG 맵",
+                desc: "DL_Test_Map_1.png 이미지를 활용한 커스텀 지형입니다.",
+                isDefault: false,
+                imgData: "DL_Test_Map_1.png", // ★ 유저 커스텀 맵
+                spawns: [{x: 150, y: 150}],   // 맵에 맞게 입출구 좌표 수정 가능
+                exits: [{x: 1150, y: 600}]
+            }
+        ];
 
         function getMapList() { return [...defaultMaps, ...customMaps]; }
 
@@ -186,7 +185,7 @@ const defaultMaps = [
             });
         }
 
-        // --- [2. 픽셀 에디터 로직 (Photoshop 스타일)] ---
+        // --- [2. 픽셀 에디터 로직] ---
         const edCanvas = document.getElementById('editorCanvas'); 
         const edCtx = edCanvas.getContext('2d', { willReadFrequently: true });
         const ovCanvas = document.getElementById('editorOverlay');
@@ -210,7 +209,6 @@ const defaultMaps = [
 
         function getMousePos(canvas, evt) {
             const rect = canvas.getBoundingClientRect();
-            // CSS는 960x540 이고 내부 캔버스는 480x270 이므로 비율을 맞춥니다.
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
             return {
@@ -235,10 +233,10 @@ const defaultMaps = [
             if (currentTool === 'brush') {
                 edCtx.globalCompositeOperation = 'source-over';
                 edCtx.fillStyle = '#8B4513';
-                edCtx.beginPath(); edCtx.arc(pos.x, pos.y, 8, 0, Math.PI * 2); edCtx.fill();
+                edCtx.beginPath(); edCtx.arc(pos.x, pos.y, 20, 0, Math.PI * 2); edCtx.fill(); // 브러시 크기 증가
             } else if (currentTool === 'eraser') {
                 edCtx.globalCompositeOperation = 'destination-out';
-                edCtx.beginPath(); edCtx.arc(pos.x, pos.y, 12, 0, Math.PI * 2); edCtx.fill();
+                edCtx.beginPath(); edCtx.arc(pos.x, pos.y, 30, 0, Math.PI * 2); edCtx.fill();
                 edCtx.globalCompositeOperation = 'source-over';
             } else if (currentTool === 'spawn' && e.type === 'mousedown') {
                 editorSpawns.push({x: pos.x, y: pos.y});
@@ -251,14 +249,14 @@ const defaultMaps = [
 
         function drawOverlay() {
             ovCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-            ovCtx.font = "bold 10px Arial";
+            ovCtx.font = "bold 16px Arial"; // 폰트 크기 증가
             editorSpawns.forEach(p => {
-                ovCtx.fillStyle = "#00FF00"; ovCtx.beginPath(); ovCtx.arc(p.x, p.y, 6, 0, Math.PI*2); ovCtx.fill();
-                ovCtx.fillStyle = "#000"; ovCtx.fillText("IN", p.x-5, p.y+3);
+                ovCtx.fillStyle = "#00FF00"; ovCtx.beginPath(); ovCtx.arc(p.x, p.y, 15, 0, Math.PI*2); ovCtx.fill();
+                ovCtx.fillStyle = "#000"; ovCtx.fillText("IN", p.x-8, p.y+6);
             });
             editorExits.forEach(p => {
-                ovCtx.fillStyle = "#FF0000"; ovCtx.beginPath(); ovCtx.arc(p.x, p.y, 6, 0, Math.PI*2); ovCtx.fill();
-                ovCtx.fillStyle = "#FFF"; ovCtx.fillText("OUT", p.x-9, p.y+3);
+                ovCtx.fillStyle = "#FF0000"; ovCtx.beginPath(); ovCtx.arc(p.x, p.y, 15, 0, Math.PI*2); ovCtx.fill();
+                ovCtx.fillStyle = "#FFF"; ovCtx.fillText("OUT", p.x-16, p.y+6);
             });
         }
 
@@ -275,7 +273,6 @@ const defaultMaps = [
             let name = prompt("맵 이름:", "내 픽셀 아트 맵"); 
             if (!name) return;
             
-            // 캔버스에 그린 그림을 Base64 이미지 데이터로 추출 (투명도 포함 PNG)
             const dataURL = edCanvas.toDataURL("image/png");
             
             customMaps.push({
@@ -296,7 +293,7 @@ const defaultMaps = [
         const gCanvas = document.getElementById('gameCanvas'); const gCtx = gCanvas.getContext('2d');
         const bCanvas = document.getElementById('bgCanvas'); const bCtx = bCanvas.getContext('2d');
 
-        let microMap = []; // 480x270 배열
+        let microMap = []; 
         let lemmings = [];
         let currentStageInfo = null;
         let gameTimer, spawnTimer, loopTimer;
@@ -324,13 +321,12 @@ const defaultMaps = [
             for (let key in skills) { let el = document.getElementById(`skill-cnt-${key}`); if (el) el.innerText = `[${skills[key].count}회]`; }
         }
 
-        // 마우스 클릭 (스킬 사용)
         gCanvas.addEventListener('mousedown', (e) => {
             const pos = getMousePos(gCanvas, e);
             if (skills[selectedSkill].count <= 0) { alert("해당 스킬 횟수를 모두 소모했습니다!"); return; }
 
             for (let lem of lemmings) {
-                if (Math.hypot(lem.x - pos.x, lem.y - pos.y) < 15) {
+                if (Math.hypot(lem.x - pos.x, lem.y - pos.y) < 30) { // 클릭 반경 증가
                     if (selectedSkill === 'floater' && !lem.isFloater) { lem.isFloater = true; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'climber' && !lem.isClimber) { lem.isClimber = true; skills[selectedSkill].count--; }
                     else if (selectedSkill === 'blocker' && lem.state !== 'blocker') { lem.state = 'blocker'; lem.vx = 0; skills[selectedSkill].count--; }
@@ -353,29 +349,25 @@ const defaultMaps = [
             }
         });
 
-        // ★ 핵심: 이미지를 게임 맵(배열)로 스캔하는 과정 ★
         function loadStageData(stageData) {
             currentStageInfo = stageData;
             
-            // 캔버스 초기화
             tCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
             bCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
             gCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
             if (stageData.isDefault) {
-                // 기본 맵 생성기 (외부 이미지가 없을 때를 위한 코드 드로잉)
                 tCtx.fillStyle = '#8B4513';
-                tCtx.beginPath(); tCtx.arc(100, 150, 60, 0, Math.PI*2); tCtx.fill();
-                tCtx.fillRect(100, 90, 200, 150);
-                tCtx.fillRect(300, 150, 100, 90);
-                tCtx.fillRect(20, 240, 440, 30);
+                tCtx.beginPath(); tCtx.arc(260, 400, 160, 0, Math.PI*2); tCtx.fill(); // 맵 크기 비례 확대
+                tCtx.fillRect(260, 240, 530, 400);
+                tCtx.fillRect(800, 400, 260, 240);
+                tCtx.fillRect(50, 640, 1180, 80);
                 scanTerrainToMap();
                 startEngine();
             } else {
-                // 저장된 커스텀 픽셀 이미지 로드
                 const img = new Image();
                 img.onload = () => {
-                    tCtx.drawImage(img, 0, 0);
+                    tCtx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
                     scanTerrainToMap();
                     startEngine();
                 };
@@ -383,7 +375,6 @@ const defaultMaps = [
             }
         }
 
-        // 지형 캔버스에서 픽셀데이터(getImageData)를 뽑아와 충돌 마스크(microMap) 배열 생성
         function scanTerrainToMap() {
             microMap = Array.from({ length: CANVAS_H }, () => Array(CANVAS_W).fill(0));
             const imgData = tCtx.getImageData(0, 0, CANVAS_W, CANVAS_H).data;
@@ -391,7 +382,6 @@ const defaultMaps = [
             for (let i = 0; i < CANVAS_W * CANVAS_H; i++) {
                 let r = Math.floor(i / CANVAS_W);
                 let c = i % CANVAS_W;
-                // 알파값(투명도)이 128 이상이면 벽(1)으로 인식
                 if (imgData[i * 4 + 3] > 128) {
                     microMap[r][c] = 1;
                 }
@@ -404,9 +394,9 @@ const defaultMaps = [
             for (let k in skills) skills[k].count = 20;
             initSkillBar(); updateUI(); showScreen('screen-game');
 
-            // 입구/출구 배경에 고정 렌더링
-            currentStageInfo.spawns.forEach(p => { bCtx.fillStyle="#00FF00"; bCtx.fillRect(p.x-10, p.y-10, 20, 20); bCtx.fillStyle="#000"; bCtx.fillText("IN", p.x-7, p.y+4); });
-            currentStageInfo.exits.forEach(p => { bCtx.fillStyle="#FF0000"; bCtx.fillRect(p.x-10, p.y-10, 20, 20); bCtx.fillStyle="#FFF"; bCtx.fillText("OUT", p.x-11, p.y+4); });
+            bCtx.font = "bold 16px Arial";
+            currentStageInfo.spawns.forEach(p => { bCtx.fillStyle="#00FF00"; bCtx.fillRect(p.x-20, p.y-20, 40, 40); bCtx.fillStyle="#000"; bCtx.fillText("IN", p.x-8, p.y+6); });
+            currentStageInfo.exits.forEach(p => { bCtx.fillStyle="#FF0000"; bCtx.fillRect(p.x-20, p.y-20, 40, 40); bCtx.fillStyle="#FFF"; bCtx.fillText("OUT", p.x-16, p.y+6); });
 
             gameTimer = setInterval(() => {
                 timeLeft--; updateUI();
@@ -417,7 +407,7 @@ const defaultMaps = [
                 if (spawnedCount < MAX_SPAWN && currentStageInfo.spawns.length > 0) {
                     let sp = currentStageInfo.spawns[spawnedCount % currentStageInfo.spawns.length];
                     lemmings.push({ 
-                        x: sp.x, y: sp.y, vx: 0.5, vy: 0, radius: 4, color: '#ffcc00',
+                        x: sp.x, y: sp.y, vx: 1.0, vy: 0, radius: 10, color: '#ffcc00', // 크기 및 속도 증가
                         state: 'walking', facing: 1, isFloater: false, isClimber: false, isBomber: false, 
                         bombTimer: 0, fallDist: 0, actionTimer: 0, frame: 0, frameDelay: 0
                     });
@@ -443,12 +433,11 @@ const defaultMaps = [
 
         function isSolid(x, y) {
             let c = Math.floor(x); let r = Math.floor(y);
-            if (c < 0 || c >= CANVAS_W || r >= CANVAS_H) return true; // 화면 밖은 벽
+            if (c < 0 || c >= CANVAS_W || r >= CANVAS_H) return true;
             if (r < 0) return false;
             return microMap[r][c] === 1 || microMap[r][c] === 4; 
         }
 
-        // 지형을 깎을 때 데이터 배열과 실제 캔버스 화면(Pixels)을 동시에 깎아냄
         function carveTerrain(cx, cy, radius) {
             let carved = false;
             let startC = Math.max(0, cx - radius); let endC = Math.min(CANVAS_W - 1, cx + radius);
@@ -457,13 +446,12 @@ const defaultMaps = [
             for (let r = startR; r <= endR; r++) {
                 for (let c = startC; c <= endC; c++) {
                     if (Math.hypot(c - cx, r - cy) <= radius && microMap[r][c] !== 0) {
-                        microMap[r][c] = 0; // 데이터 지움
+                        microMap[r][c] = 0; 
                         carved = true;
                     }
                 }
             }
             if(carved) {
-                // 화면의 흙 지우기 (원형 브러시)
                 tCtx.globalCompositeOperation = 'destination-out';
                 tCtx.beginPath(); tCtx.arc(cx, cy, radius, 0, Math.PI * 2); tCtx.fill();
                 tCtx.globalCompositeOperation = 'source-over';
@@ -471,14 +459,13 @@ const defaultMaps = [
             return carved;
         }
         
-        // 계단(픽셀) 생성
         function buildTerrain(cx, cy, width, height) {
             for(let r = cy; r < cy + height; r++) {
                 for(let c = cx; c < cx + width; c++) {
                     if(r >= 0 && r < CANVAS_H && c >= 0 && c < CANVAS_W) {
-                        microMap[r][c] = 4; // 계단 데이터
+                        microMap[r][c] = 4; 
                         tCtx.fillStyle = '#e67e22';
-                        tCtx.fillRect(c, r, 1, 1); // 화면에 그리기
+                        tCtx.fillRect(c, r, 1, 1);
                     }
                 }
             }
@@ -492,10 +479,9 @@ const defaultMaps = [
                 let lem = lemmings[i];
                 let footY = Math.floor(lem.y + lem.radius + 1);
 
-                // 탈출 판정
                 let escaped = false;
                 for(let ex of currentStageInfo.exits) {
-                    if (Math.hypot(lem.x - ex.x, lem.y - ex.y) < 15) {
+                    if (Math.hypot(lem.x - ex.x, lem.y - ex.y) < 25) {
                         escaped = true; break;
                     }
                 }
@@ -509,37 +495,34 @@ const defaultMaps = [
                     continue;
                 }
 
-                // 폭탄 카운트다운
                 if (lem.isBomber) {
                     lem.bombTimer--;
                     if (lem.bombTimer <= 0) {
-                        carveTerrain(Math.floor(lem.x), Math.floor(lem.y), 20); // 반경 20픽셀 펑!
-                        gCtx.fillStyle = "#ff0000"; gCtx.font = "bold 15px Arial"; gCtx.fillText("💥", lem.x-8, lem.y);
+                        carveTerrain(Math.floor(lem.x), Math.floor(lem.y), 50); // 폭탄 파괴 반경 50으로 증가
+                        gCtx.fillStyle = "#ff0000"; gCtx.font = "bold 24px Arial"; gCtx.fillText("💥", lem.x-12, lem.y);
                         lemmings.splice(i, 1); deadCount++; updateUI(); continue;
                     }
                 }
 
-                // 상태별 로직 처리
                 if (lem.state === 'blocker') {
                     lem.vx = 0; lem.vy = 0;
                     for (let other of lemmings) {
-                        if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 8) other.vx *= -1;
+                        if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 16) other.vx *= -1;
                     }
                 }
                 else if (lem.state === 'building') {
                     lem.vx = 0; lem.vy = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 10) { 
                         lem.actionTimer = 0;
-                        let stepX = Math.floor(lem.x + lem.facing * 5);
-                        let stepY = footY - 2;
+                        let stepX = Math.floor(lem.x + lem.facing * 12);
+                        let stepY = footY - 4;
                         
                         if (lem.buildCount > 0 && !isSolid(stepX, stepY)) {
-                            // 가로 4px, 세로 2px 짜리 블록 생성
-                            buildTerrain((lem.facing > 0) ? stepX : stepX - 4, stepY, 4, 2);
-                            lem.x += lem.facing * 4; lem.y -= 2;
+                            buildTerrain((lem.facing > 0) ? stepX : stepX - 10, stepY, 10, 4); // 계단 크기 증가
+                            lem.x += lem.facing * 10; lem.y -= 4;
                             lem.buildCount--;
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 0.5; 
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.0; 
                         }
                     }
                 }
@@ -547,10 +530,10 @@ const defaultMaps = [
                     lem.vx = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 15) { 
                         lem.actionTimer = 0;
-                        if (carveTerrain(Math.floor(lem.x), footY + 2, 6)) {
-                            lem.y += 2; 
+                        if (carveTerrain(Math.floor(lem.x), footY + 4, 16)) { // 파기 반경 16으로 증가
+                            lem.y += 4; 
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 0.5; 
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.0; 
                         }
                     }
                 }
@@ -558,11 +541,11 @@ const defaultMaps = [
                     lem.vy = 0; lem.actionTimer++;
                     if (lem.actionTimer >= 10) {
                         lem.actionTimer = 0;
-                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2));
-                        if (carveTerrain(frontX, Math.floor(lem.y), 6)) {
-                            lem.x += lem.facing * 2; 
+                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 4 : -lem.radius - 4));
+                        if (carveTerrain(frontX, Math.floor(lem.y), 16)) { 
+                            lem.x += lem.facing * 4; 
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 0.5; 
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.0; 
                         }
                     }
                 }
@@ -570,41 +553,39 @@ const defaultMaps = [
                     lem.actionTimer++;
                     if (lem.actionTimer >= 15) {
                         lem.actionTimer = 0;
-                        let targetX = Math.floor(lem.x + lem.facing * 4);
-                        if (carveTerrain(targetX, footY + 2, 6)) {
-                            lem.x += lem.facing * 2; lem.y += 2;
+                        let targetX = Math.floor(lem.x + lem.facing * 8);
+                        if (carveTerrain(targetX, footY + 4, 16)) {
+                            lem.x += lem.facing * 4; lem.y += 4;
                         } else {
-                            lem.state = 'walking'; lem.vx = lem.facing * 0.5;
+                            lem.state = 'walking'; lem.vx = lem.facing * 1.0;
                         }
                     }
                 }
                 else if (lem.state === 'climbing') {
-                    lem.vx = 0; lem.vy = -0.7; lem.y += lem.vy;
-                    let checkFront = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
+                    lem.vx = 0; lem.vy = -1.5; lem.y += lem.vy; // 벽타기 속도 증가
+                    let checkFront = lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2);
                     if (!isSolid(checkFront, lem.y)) {
-                        lem.state = 'walking'; lem.vx = lem.facing * 0.5; lem.y -= 2; 
-                    } else if (isSolid(lem.x, lem.y - lem.radius - 2)) {
-                        lem.state = 'walking'; lem.vx = -lem.facing * 0.5; 
+                        lem.state = 'walking'; lem.vx = lem.facing * 1.0; lem.y -= 4; 
+                    } else if (isSolid(lem.x, lem.y - lem.radius - 4)) {
+                        lem.state = 'walking'; lem.vx = -lem.facing * 1.0; 
                     }
                 }
                 else {
-                    // 낙하 및 걷기 물리
                     if (!isSolid(lem.x, footY)) {
-                        lem.vy = lem.isFloater ? 0.5 : 1.5; 
+                        lem.vy = lem.isFloater ? 1.0 : 3.0; // 낙하 속도 증가
                         lem.y += lem.vy; lem.fallDist += lem.vy;
                     } else {
-                        if (!lem.isFloater && lem.fallDist > 80) { // 치사량 조정 (해상도 비례)
-                            gCtx.fillStyle = "#ff0000"; gCtx.fillText("💥", lem.x-5, lem.y);
+                        if (!lem.isFloater && lem.fallDist > 200) { // 치사량 높이 200으로 증가
+                            gCtx.fillStyle = "#ff0000"; gCtx.font = "bold 20px Arial"; gCtx.fillText("💥", lem.x-10, lem.y);
                             lemmings.splice(i, 1); deadCount++; updateUI(); continue;
                         }
                         lem.vy = 0; lem.fallDist = 0;
                         if (lem.vx !== 0) lem.facing = lem.vx > 0 ? 1 : -1;
-                        let frontX = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
+                        let frontX = lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2);
                         
                         if (isSolid(frontX, lem.y)) {
                             let steppedUp = false;
-                            // 부드러운 경사 오르기 (픽셀 기반)
-                            for (let stepUp = 1; stepUp <= 4; stepUp++) {
+                            for (let stepUp = 1; stepUp <= 8; stepUp++) { // 오르막 등반 높이 증가
                                 if (!isSolid(frontX, lem.y - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) {
                                     lem.y -= stepUp; lem.x += lem.vx; steppedUp = true; break;
                                 }
@@ -620,7 +601,7 @@ const defaultMaps = [
                 }
 
                 // === 캐릭터 렌더링 ===
-                let imgSize = 16; 
+                let imgSize = 40; // 이미지 크기 40으로 증가
                 if (dlWalkImg.complete && dlWalkImg.naturalWidth > 0) {
                     let cols = 2; let rows = 2;
                     let frameWidth = dlWalkImg.naturalWidth / cols;
@@ -645,12 +626,10 @@ const defaultMaps = [
                     }
                     gCtx.restore();
                 } else {
-                    // 이미지 없을 때 Fallback 동그라미
                     gCtx.beginPath(); gCtx.arc(lem.x, lem.y, lem.radius, 0, Math.PI * 2);
                     gCtx.fillStyle = lem.color; gCtx.fill();
                 }
 
-                // 상태 아이콘 렌더링
                 let icons = [];
                 if (lem.isFloater) icons.push("🪂"); if (lem.isClimber) icons.push("🧗");
                 if (lem.state === 'blocker') icons.push("🛑"); if (lem.state === 'building') icons.push("🪜");
@@ -659,14 +638,13 @@ const defaultMaps = [
                 if (lem.isBomber) icons.push(`💣${Math.ceil(lem.bombTimer / 60)}`);
 
                 if (icons.length > 0) {
-                    gCtx.font = "bold 9px Arial"; gCtx.fillStyle = lem.isBomber ? "#ffcc00" : "#fff";
-                    gCtx.fillText(icons.join(""), lem.x - (icons.length * 6), lem.y - 8);
+                    gCtx.font = "bold 14px Arial"; gCtx.fillStyle = lem.isBomber ? "#ffcc00" : "#fff";
+                    gCtx.fillText(icons.join(""), lem.x - (icons.length * 8), lem.y - 18);
                 }
                 
-                // 낙하산 시각 효과
-                if (lem.isFloater && lem.fallDist > 5) {
-                    gCtx.beginPath(); gCtx.arc(lem.x, lem.y - 6, 6, Math.PI, 0);
-                    gCtx.strokeStyle = '#fff'; gCtx.lineWidth = 1.5; gCtx.stroke();
+                if (lem.isFloater && lem.fallDist > 10) {
+                    gCtx.beginPath(); gCtx.arc(lem.x, lem.y - 15, 12, Math.PI, 0);
+                    gCtx.strokeStyle = '#fff'; gCtx.lineWidth = 2; gCtx.stroke();
                 }
             }
 
