@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>도구리 레밍즈 - 클래식 마이크로 스텝 에디션</title>
+    <title>도구리 레밍즈 - 시원한 마이닝 & 스텝업 완결편</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -50,20 +50,18 @@
             position: relative; width: 960px; height: 540px;
             border-left: 1px solid #444; border-right: 1px solid #444;
             background-color: #1a2a3a;
-            overflow: hidden; cursor: grab; /* 드래그 아이콘 */
+            overflow: hidden; cursor: grab;
         }
         .canvas-wrapper:active { cursor: grabbing; }
-        /* 캔버스는 동적으로 길이가 늘어남. image-rendering으로 픽셀 깨짐 방지 */
         .canvas-wrapper canvas { position: absolute; left: 0; top: 0; height: 100%; image-rendering: pixelated; }
 
-        /* 하단 스킬 바 + 미니맵 컨테이너 (높이 100px) */
+        /* 하단 스킬 바 + 미니맵 컨테이너 */
         .bottom-ui {
             width: 960px; height: 100px; display: flex; justify-content: space-between;
             background: #1a1a1a; border: 1px solid #444; border-radius: 0 0 8px 8px;
             box-sizing: border-box; overflow: hidden;
         }
 
-        /* 1열 스킬 버튼 영역 */
         .skill-panel {
             display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 6px;
             padding: 0 15px; flex-grow: 1;
@@ -79,7 +77,6 @@
         .skill-btn span { font-size: 10px; margin-top: 4px; color: #aaa; }
         .skill-btn.active span { color: #333; font-weight: bold; }
 
-        /* 미니맵 영역 (340x100) */
         #minimapCanvas {
             width: 340px; height: 100px; background: #000; border-left: 2px solid #444;
             cursor: pointer;
@@ -94,7 +91,7 @@
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (클래식 마이크로 스텝 에디션)</h1>
+    <h1>🐶 도구리 레밍즈 (시원한 마이닝 & 스텝업 완결편)</h1>
 
     <div id="screen-lobby" class="screen active">
         <div class="menu-box">
@@ -110,7 +107,6 @@
     </div>
 
     <div id="screen-game" class="screen">
-        <!-- 상단 정보바 -->
         <div class="ui-bar">
             <button class="back-btn" onclick="stopGame(); showScreen('screen-select');">◀ 포기</button>
             <div class="status-box">⏱️ 시간: <span id="ui-timer">05:00</span></div>
@@ -119,14 +115,12 @@
             <div class="status-box">🏃 탈출 성공: <span id="ui-saved">0</span> / 10</div>
         </div>
         
-        <!-- 게임 뷰포트 (드래그 패닝 영역) -->
         <div class="canvas-wrapper" id="gameWrapper">
             <canvas id="bgCanvas" height="540" style="z-index: 1;"></canvas>
             <canvas id="terrainCanvas" height="540" style="z-index: 2;"></canvas>
             <canvas id="gameCanvas" height="540" style="z-index: 3;"></canvas>
         </div>
         
-        <!-- 하단 UI (스킬 버튼 1열 + 미니맵) -->
         <div class="bottom-ui">
             <div class="skill-panel" id="skillBar"></div>
             <canvas id="minimapCanvas" width="340" height="100"></canvas>
@@ -155,7 +149,6 @@
     </div>
 
     <script>
-        // --- [★ 시스템 상수 ★] ---
         const VIEW_W = 960; 
         const CANVAS_H = 540;
         let MAP_W = 960; 
@@ -269,7 +262,6 @@
         }
         function updateSkillCountUI() { for (let key in skills) { let el = document.getElementById(`skill-cnt-${key}`); if (el) el.innerText = `[${skills[key].count}]`; } }
 
-        // ★ 카메라 패닝 (드래그) 시스템 ★
         let isDraggingMap = false;
         let isDragMoved = false; 
         let dragStartX = 0;
@@ -288,7 +280,6 @@
         });
         window.addEventListener('mouseup', () => { isDraggingMap = false; });
 
-        // ★ 스킬 사용 (클릭) ★
         gameWrapper.addEventListener('mouseup', (e) => {
             if (isDragMoved) return; 
             
@@ -313,7 +304,6 @@
             }
         });
 
-        // ★ 미니맵 클릭 이동 시스템 ★
         let isMinimapDragging = false;
         mCanvas.addEventListener('mousedown', (e) => { isMinimapDragging = true; moveCameraToMinimap(e); });
         window.addEventListener('mousemove', (e) => { if(isMinimapDragging && e.target === mCanvas) moveCameraToMinimap(e); });
@@ -412,7 +402,7 @@
             return microMap[r][c] === 1 || microMap[r][c] === 4; 
         }
 
-        // ★ [원작 완벽 구현] 100% 정형화된 정밀 마이크로 스텝 파괴 함수 ★
+        // ★ [정밀 수학 마이닝] 캐릭터 크기(30px)에 맞춰 시원하게 파는 함수
         function carveTerrain(cx, cy, radius) {
             let carved = false;
             let startC = Math.max(0, Math.floor(cx - radius)); 
@@ -422,7 +412,6 @@
             
             for (let r = startR; r <= endR; r++) {
                 for (let c = startC; c <= endC; c++) {
-                    // 랜덤 노이즈 0%, 완벽한 기하학 마스크
                     if (Math.hypot(c - cx, r - cy) <= radius && microMap[r][c] !== 0) { 
                         microMap[r][c] = 0; 
                         carved = true; 
@@ -481,68 +470,61 @@
                     lem.vx = 0; lem.vy = 0;
                     for (let other of lemmings) { if (other !== lem && Math.hypot(lem.x - other.x, lem.y - other.y) < 14) other.vx *= -1; }
                 }
-                // ★ [수정 2] 일반 걷기(Walking): 발끝 높이의 계단을 감지하고 완벽히 올라서도록 개선
-                else {
-                    if (!isSolid(lem.x, footY)) {
-                        lem.vy = lem.isFloater ? 0.8 : 2.5; lem.y += lem.vy; lem.fallDist += lem.vy;
-                    } else {
-                        if (!lem.isFloater && lem.fallDist > 500) { gCtx.fillStyle = "#ff0000"; gCtx.font = "bold 16px Arial"; gCtx.fillText("💥", lem.x-8, lem.y); lemmings.splice(i, 1); deadCount++; updateUI(); continue; }
-                        lem.vy = 0; lem.fallDist = 0;
-                        if (lem.vx !== 0) lem.facing = lem.vx > 0 ? 1 : -1;
-                        let frontX = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
-                        
-                        // 허리(lem.y)뿐만 아니라 발끝(footY - 1) 높이에 계단 장애물이 있는지 감지
-                        if (isSolid(frontX, footY - 1) || isSolid(frontX, lem.y)) {
-                            let steppedUp = false;
-                            // 계단을 오를 때 발끝(footY - 1 - stepUp)이 장애물 위에 완벽히 안착하는지 검사
-                            for (let stepUp = 1; stepUp <= 6; stepUp++) { 
-                                if (!isSolid(frontX, footY - 1 - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) { 
-                                    lem.y -= stepUp; 
-                                    lem.x += lem.vx; 
-                                    steppedUp = true; 
-                                    break; 
-                                } 
-                            }
-                            if (!steppedUp) { if (lem.isClimber) lem.state = 'climbing'; else lem.vx *= -1; }
-                        } else { lem.x += lem.vx; }
-                    }
-                }
-                // ★ [원작 마이크로 스텝] 수직파기(Digger): 4프레임마다 7px 반경을 깎고 1px씩 부드럽게 하강
-                else if (lem.state === 'digging') {
-                    lem.vx = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 4) { 
+                // ★ 계단(Builder): 틈새 없이 넉넉하게 짓기
+                else if (lem.state === 'building') {
+                    lem.vx = 0; lem.vy = 0; lem.actionTimer++;
+                    if (lem.actionTimer >= 10) { 
                         lem.actionTimer = 0; 
-                        if (carveTerrain(Math.floor(lem.x), footY + 1, 7)) { 
-                            lem.y += 1; 
-                        } else { 
-                            lem.state = 'walking'; 
-                            lem.vx = lem.facing * 0.8; 
-                        } 
-                    }
-                }
-                // ★ [원작 마이크로 스텝] 정면파기(Basher): 3프레임마다 8px 반경을 깎고 1px씩 부드럽게 전진
-                else if (lem.state === 'bashing') {
-                    lem.vy = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 3) { 
-                        lem.actionTimer = 0; 
-                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2));
-                        if (carveTerrain(frontX, Math.floor(lem.y), 8)) { 
-                            lem.x += lem.facing * 1; 
+                        let stepX = Math.floor(lem.x + lem.facing * 6);
+                        let stepY = footY - 3;
+                        if (lem.buildCount > 0 && !isSolid(stepX, stepY)) { 
+                            let buildX = (lem.facing > 0) ? stepX - 2 : stepX - 8;
+                            buildTerrain(buildX, stepY, 10, 4); 
+                            lem.x += lem.facing * 6; 
+                            lem.y -= 3; 
+                            lem.buildCount--; 
                         } else { 
                             lem.state = 'walking'; 
                             lem.vx = lem.facing * 0.8; 
                         }
                     }
                 }
-                // ★ [원작 마이크로 스텝] 대각파기(Miner): 4프레임마다 대각선 방향을 정밀하게 파고 들어감
+                // ★ 수직파기(Digger): 반경 13px로 시원하고 넓게 뚫음!
+                else if (lem.state === 'digging') {
+                    lem.vx = 0; lem.actionTimer++;
+                    if (lem.actionTimer >= 3) { 
+                        lem.actionTimer = 0; 
+                        if (carveTerrain(Math.floor(lem.x), footY + 1, 13)) { 
+                            lem.y += 1.5; 
+                        } else { 
+                            lem.state = 'walking'; 
+                            lem.vx = lem.facing * 0.8; 
+                        } 
+                    }
+                }
+                // ★ 정면파기(Basher): 전방을 14px 반경으로 시원하게 터버림!
+                else if (lem.state === 'bashing') {
+                    lem.vy = 0; lem.actionTimer++;
+                    if (lem.actionTimer >= 3) { 
+                        lem.actionTimer = 0; 
+                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 3 : -lem.radius - 3));
+                        if (carveTerrain(frontX, Math.floor(lem.y) - 2, 14)) { 
+                            lem.x += lem.facing * 1.2; 
+                        } else { 
+                            lem.state = 'walking'; 
+                            lem.vx = lem.facing * 0.8; 
+                        }
+                    }
+                }
+                // ★ 대각파기(Miner): 14px 반경으로 완만하고 널찍하게 대각선 동굴 생성!
                 else if (lem.state === 'mining') {
                     lem.actionTimer++;
-                    if (lem.actionTimer >= 4) { 
+                    if (lem.actionTimer >= 3) { 
                         lem.actionTimer = 0; 
-                        let targetX = Math.floor(lem.x + lem.facing * 4);
-                        if (carveTerrain(targetX, footY + 2, 8)) { 
-                            lem.x += lem.facing * 1; 
-                            lem.y += 1; 
+                        let targetX = Math.floor(lem.x + lem.facing * 5);
+                        if (carveTerrain(targetX, footY, 14)) { 
+                            lem.x += lem.facing * 1.2; 
+                            lem.y += 1.2; 
                         } else { 
                             lem.state = 'walking'; 
                             lem.vx = lem.facing * 0.8; 
@@ -554,6 +536,7 @@
                     let checkFront = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
                     if (!isSolid(checkFront, lem.y)) { lem.state = 'walking'; lem.vx = lem.facing * 0.8; lem.y -= 3; } else if (isSolid(lem.x, lem.y - lem.radius - 3)) { lem.state = 'walking'; lem.vx = -lem.facing * 0.8; }
                 }
+                // ★ 일반 걷기 & 등반력 업그레이드: 11px 높이의 턱/계단도 부드럽게 스텝업!
                 else {
                     if (!isSolid(lem.x, footY)) {
                         lem.vy = lem.isFloater ? 0.8 : 2.5; lem.y += lem.vy; lem.fallDist += lem.vy;
@@ -562,9 +545,18 @@
                         lem.vy = 0; lem.fallDist = 0;
                         if (lem.vx !== 0) lem.facing = lem.vx > 0 ? 1 : -1;
                         let frontX = lem.x + (lem.facing > 0 ? lem.radius + 1 : -lem.radius - 1);
-                        if (isSolid(frontX, lem.y)) {
+                        
+                        if (isSolid(frontX, footY - 1) || isSolid(frontX, lem.y)) {
                             let steppedUp = false;
-                            for (let stepUp = 1; stepUp <= 6; stepUp++) { if (!isSolid(frontX, lem.y - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) { lem.y -= stepUp; lem.x += lem.vx; steppedUp = true; break; } }
+                            // 등반 감지 능력을 6px -> 11px로 확장하여 울퉁불퉁한 지형도 척척 넘어감
+                            for (let stepUp = 1; stepUp <= 11; stepUp++) { 
+                                if (!isSolid(frontX, footY - 1 - stepUp) && !isSolid(lem.x, lem.y - lem.radius - stepUp)) { 
+                                    lem.y -= stepUp; 
+                                    lem.x += lem.vx; 
+                                    steppedUp = true; 
+                                    break; 
+                                } 
+                            }
                             if (!steppedUp) { if (lem.isClimber) lem.state = 'climbing'; else lem.vx *= -1; }
                         } else { lem.x += lem.vx; }
                     }
