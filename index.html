@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>도구리 레밍즈 - 시각맵 & 마스크 2장 분리 완결편</title>
+    <title>도구리 레밍즈 - 데이터/엔진 분리 완결편</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -23,19 +23,29 @@
         }
         .big-btn:hover { background: #ffcc00; color: #000; transform: scale(1.05); }
         
-        .map-list { display: flex; flex-wrap: wrap; gap: 15px; width: 960px; justify-content: center; margin: 20px 0; }
+        /* 맵 리스트: 스크롤 기능 추가 */
+        .map-list { 
+            display: flex; flex-wrap: wrap; gap: 15px; width: 960px; justify-content: center; margin: 20px 0; 
+            max-height: 400px; /* 창 높이 제한 */
+            overflow-y: auto;  /* 세로 스크롤 자동 생성 */
+            padding: 10px;
+        }
+        /* 스크롤바 디자인 */
+        .map-list::-webkit-scrollbar { width: 8px; }
+        .map-list::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .map-list::-webkit-scrollbar-thumb:hover { background: #888; }
+
         .map-card {
             width: 380px; padding: 15px; background: #222; border: 2px solid #555;
             border-radius: 8px; text-align: left; cursor: pointer; transition: 0.2s;
         }
         .map-card:hover { border-color: #00ff66; background: #2a3a2a; transform: translateY(-2px); }
 
-        /* 캔버스 래퍼 (움직이는 배경 적용 가능) */
+        /* 캔버스 래퍼 */
         .canvas-wrapper {
             position: relative; width: 960px; height: 540px;
             border: 2px solid #555; box-shadow: 0 8px 16px rgba(0,0,0,0.5);
-            /* ▼ 여기에 아름다운 밤하늘 등 CSS 배경이나 GIF를 넣을 수 있습니다! ▼ */
-            background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364); 
+            background-color: #1a2a3a;
             overflow: hidden; cursor: crosshair;
         }
         .canvas-wrapper canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; image-rendering: pixelated; }
@@ -74,7 +84,7 @@
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (시각 맵 + 물리 마스크 분리 에디션)</h1>
+    <h1>🐶 도구리 레밍즈 (자동 마스크 & 모듈화 완료)</h1>
 
     <!-- 1. 로비 -->
     <div id="screen-lobby" class="screen active">
@@ -101,7 +111,7 @@
             <div class="status-box">🏃 탈출 성공: <span id="ui-saved">0</span> / 10</div>
         </div>
         
-        <div class="canvas-wrapper">
+        <div class="canvas-wrapper" id="gameWrapper">
             <canvas id="bgCanvas" width="960" height="540" style="z-index: 1;"></canvas>
             <canvas id="terrainCanvas" width="960" height="540" style="z-index: 2;"></canvas>
             <canvas id="gameCanvas" width="960" height="540" style="z-index: 3;"></canvas>
@@ -132,6 +142,9 @@
         <p style="font-size: 13px; color: #aaa; margin-top: 10px;">마우스 드래그로 지형을 그리고, 입구와 출구를 클릭해 배치하세요.</p>
     </div>
 
+    <!-- ★ 외부 스테이지 데이터를 불러오는 스크립트 ★ -->
+    <script src="stages.js"></script>
+
     <script>
         // --- [★ 시스템 상수 ★] ---
         const CANVAS_W = 960; 
@@ -141,31 +154,13 @@
         dlWalkImg.src = 'DL_Walk_1.png';
         const TOTAL_FRAMES = 4;
 
-        // --- [1. 맵 데이터 구조] ---
+        // 에디터에서 만든 커스텀 맵 로드
         let customMaps = JSON.parse(localStorage.getItem("doguri_pixel_maps") || "[]");
         
-        const defaultMaps = [
-            {
-                id: "stage_1",
-                name: "스테이지 1: 픽셀 터널 뚫기",
-                desc: "기본 테스트 맵입니다. 하얀색 배경은 빈 공간으로 처리됩니다.",
-                isDefault: true,
-                spawns: [{x: 80, y: 80}], exits: [{x: 850, y: 450}]
-            },
-            // ★ 아래가 바로 2장(비주얼 + 마스크)을 활용하는 맵 세팅입니다! ★
-            {
-                id: "test_map_1",
-                name: "테스트 스테이지: 2장 분리 맵",
-                desc: "비주얼 원본(DL_Test_Map_1.png)과 충돌 마스크(DL_Test_Map_1_mask.png)를 분리 적용한 맵입니다.",
-                isDefault: false,
-                imgData: "DL_Test_Map_1.png",       // 눈에 보이는 파괴 가능한 예쁜 지형
-                maskData: "DL_Test_Map_1_mask.png", // 도구리가 밟고 부딪힐 물리 판정 마스크 (흑백)
-                spawns: [{x: 100, y: 100}],   
-                exits: [{x: 850, y: 450}]
-            }
-        ];
-
-        function getMapList() { return [...defaultMaps, ...customMaps]; }
+        function getMapList() { 
+            // stages.js에서 불러온 defaultMaps와 커스텀 맵을 합침
+            return [...defaultMaps, ...customMaps]; 
+        }
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -186,7 +181,7 @@
             });
         }
 
-        // --- [2. 픽셀 에디터 로직] (생략 없이 유지) ---
+        // --- [2. 픽셀 에디터 로직] ---
         const edCanvas = document.getElementById('editorCanvas'); 
         const edCtx = edCanvas.getContext('2d', { willReadFrequently: true });
         const ovCanvas = document.getElementById('editorOverlay');
@@ -233,8 +228,14 @@
             if (editorSpawns.length === 0 || editorExits.length === 0) { alert("🟢 입구와 🔴 출구를 최소 1개씩 찍어주세요!"); return; }
             let name = prompt("맵 이름:", "내 픽셀 아트 맵"); if (!name) return;
             const dataURL = edCanvas.toDataURL("image/png");
-            // 에디터에서 만든 건 원본과 마스크를 동일하게 1장 처리
-            customMaps.push({ id: "custom_" + Date.now(), name: name, imgData: dataURL, maskData: dataURL, spawns: editorSpawns, exits: editorExits });
+            
+            customMaps.push({ 
+                id: "custom_" + Date.now(), 
+                name: name, 
+                terrainData: dataURL, 
+                bgStyle: "#1a2a3a", 
+                spawns: editorSpawns, exits: editorExits 
+            });
             localStorage.setItem("doguri_pixel_maps", JSON.stringify(customMaps));
             alert("저장 완료!"); showScreen('screen-lobby');
         }
@@ -243,6 +244,7 @@
         const tCanvas = document.getElementById('terrainCanvas'); const tCtx = tCanvas.getContext('2d', { willReadFrequently: true });
         const gCanvas = document.getElementById('gameCanvas'); const gCtx = gCanvas.getContext('2d');
         const bCanvas = document.getElementById('bgCanvas'); const bCtx = bCanvas.getContext('2d');
+        const gameWrapper = document.getElementById('gameWrapper');
 
         let microMap = []; let lemmings = []; let currentStageInfo = null;
         let gameTimer, spawnTimer, loopTimer;
@@ -287,7 +289,6 @@
             }
         });
 
-        // ★ [핵심수정] 2장의 이미지를 순차적으로 불러오기
         function loadStageData(stageData) {
             currentStageInfo = stageData;
             
@@ -295,56 +296,36 @@
             bCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
             gCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
+            gameWrapper.style.background = stageData.bgStyle || "#1a2a3a";
+
             if (stageData.isDefault) {
-                // 기본 맵 생성기 (마스크와 비주얼 동일 처리)
                 tCtx.fillStyle = '#8B4513';
                 tCtx.beginPath(); tCtx.arc(200, 300, 120, 0, Math.PI*2); tCtx.fill(); 
                 tCtx.fillRect(200, 180, 400, 300);
                 tCtx.fillRect(600, 300, 200, 180);
                 tCtx.fillRect(40, 480, 880, 60);
-                
-                scanMaskToMap(tCtx); // 그린 걸 그대로 마스크로 스캔
+                scanTerrainToMap();
                 startEngine();
             } else {
-                // 1. 비주얼 맵 로드 (DL_Test_Map_1.png)
-                const visualImg = new Image();
-                visualImg.onload = () => {
-                    tCtx.drawImage(visualImg, 0, 0, CANVAS_W, CANVAS_H);
-                    
-                    // 2. 충돌 마스크 맵 로드 (DL__Test_Map_1_mask.png)
-                    const maskImg = new Image();
-                    maskImg.onload = () => {
-                        // 마스크 이미지를 분석할 숨겨진 임시 캔버스 생성
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = CANVAS_W; tempCanvas.height = CANVAS_H;
-                        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-                        tempCtx.drawImage(maskImg, 0, 0, CANVAS_W, CANVAS_H);
-                        
-                        // 숨겨진 캔버스에서 물리 마스크 스캔
-                        scanMaskToMap(tempCtx);
-                        startEngine();
-                    };
-                    maskImg.src = stageData.maskData; // 마스크 데이터 로드
+                const terrainImg = new Image();
+                terrainImg.onload = () => {
+                    tCtx.drawImage(terrainImg, 0, 0, CANVAS_W, CANVAS_H);
+                    scanTerrainToMap();
+                    startEngine();
                 };
-                visualImg.src = stageData.imgData; // 비주얼 데이터 로드
+                terrainImg.src = stageData.terrainData;
             }
         }
 
-        // 숨겨진 마스크 캔버스의 Context를 받아서 배열 맵을 만듦
-        function scanMaskToMap(maskCtx) {
+        function scanTerrainToMap() {
             microMap = Array.from({ length: CANVAS_H }, () => Array(CANVAS_W).fill(0));
-            let imgData = maskCtx.getImageData(0, 0, CANVAS_W, CANVAS_H).data;
+            let imgData = tCtx.getImageData(0, 0, CANVAS_W, CANVAS_H).data;
             
             for (let i = 0; i < CANVAS_W * CANVAS_H; i++) {
-                let r_idx = i * 4;
-                let red = imgData[r_idx]; let green = imgData[r_idx + 1]; let blue = imgData[r_idx + 2]; let alpha = imgData[r_idx + 3];
-
-                let row = Math.floor(i / CANVAS_W); let col = i % CANVAS_W;
-
-                // 마스크 이미지에서 알파값이 있고 완전 흰색이 아닌 곳을 벽으로 인식
-                if (alpha > 128 && !(red > 240 && green > 240 && blue > 240)) {
-                    microMap[row][col] = 1; 
-                }
+                let alpha = imgData[i * 4 + 3];
+                let row = Math.floor(i / CANVAS_W);
+                let col = i % CANVAS_W;
+                if (alpha > 50) { microMap[row][col] = 1; }
             }
         }
 
@@ -397,7 +378,6 @@
             return microMap[r][c] === 1 || microMap[r][c] === 4; 
         }
 
-        // 땅을 팔 때 1) 데이터 지우고 2) 비주얼 맵도 지워서 뒤의 배경(하늘)이 보이게 함
         function carveTerrain(cx, cy, radius) {
             let carved = false;
             let startC = Math.max(0, cx - radius); let endC = Math.min(CANVAS_W - 1, cx + radius);
@@ -411,7 +391,6 @@
                 }
             }
             if(carved) {
-                // 실제 화면(비주얼 맵)에서도 그 부위를 투명하게 도려냅니다.
                 tCtx.globalCompositeOperation = 'destination-out';
                 tCtx.beginPath(); tCtx.arc(cx, cy, radius, 0, Math.PI * 2); tCtx.fill();
                 tCtx.globalCompositeOperation = 'source-over';
