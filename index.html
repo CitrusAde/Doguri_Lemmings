@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>도구리 레밍즈 - 와이드맵 & 미니맵 지원 완결편</title>
+    <title>도구리 레밍즈 - 클래식 마이크로 스텝 에디션</title>
     <style>
         body {
             background-color: #111; color: #fff; font-family: 'Malgun Gothic', sans-serif;
@@ -94,7 +94,7 @@
 </head>
 <body>
 
-    <h1>🐶 도구리 레밍즈 (와이드맵 & 클래식 UI 에디션)</h1>
+    <h1>🐶 도구리 레밍즈 (클래식 마이크로 스텝 에디션)</h1>
 
     <div id="screen-lobby" class="screen active">
         <div class="menu-box">
@@ -412,45 +412,31 @@
             return microMap[r][c] === 1 || microMap[r][c] === 4; 
         }
 
-        // ★ 버그가 수정된 부드러운 지형 파괴 함수 ★
+        // ★ [원작 완벽 구현] 100% 정형화된 정밀 마이크로 스텝 파괴 함수 ★
         function carveTerrain(cx, cy, radius) {
-            let carvedAny = false;
+            let carved = false;
+            let startC = Math.max(0, Math.floor(cx - radius)); 
+            let endC = Math.min(MAP_W - 1, Math.floor(cx + radius));
+            let startR = Math.max(0, Math.floor(cy - radius)); 
+            let endR = Math.min(CANVAS_H - 1, Math.floor(cy + radius));
             
-            // 한 번에 원 전체를 쾅 지우지 않고, 중심점을 무작위로 미세하게 움직이며 3회 겹쳐 지웁니다.
-            for (let i = 0; i < 3; i++) {
-                let rx = Math.floor(cx + (Math.random() * 6 - 3));
-                let ry = Math.floor(cy + (Math.random() * 6 - 3));
-                
-                let startC = Math.max(0, rx - radius); 
-                let endC = Math.min(MAP_W - 1, rx + radius);
-                let startR = Math.max(0, ry - radius); 
-                let endR = Math.min(CANVAS_H - 1, ry + radius);
-                
-                let localCarved = false;
-                
-                // 2차원 배열 데이터 갱신
-                for (let r = startR; r <= endR; r++) {
-                    for (let c = startC; c <= endC; c++) {
-                        if (Math.hypot(c - rx, r - ry) <= radius) {
-                            if (microMap[r][c] !== 0) {
-                                microMap[r][c] = 0;
-                                localCarved = true;
-                                carvedAny = true;
-                            }
-                        }
+            for (let r = startR; r <= endR; r++) {
+                for (let c = startC; c <= endC; c++) {
+                    // 랜덤 노이즈 0%, 완벽한 기하학 마스크
+                    if (Math.hypot(c - cx, r - cy) <= radius && microMap[r][c] !== 0) { 
+                        microMap[r][c] = 0; 
+                        carved = true; 
                     }
                 }
-                
-                // 캔버스 화면 드로잉 갱신
-                if (localCarved) {
-                    tCtx.globalCompositeOperation = 'destination-out';
-                    tCtx.beginPath(); 
-                    tCtx.arc(rx, ry, radius, 0, Math.PI * 2); 
-                    tCtx.fill(); 
-                    tCtx.globalCompositeOperation = 'source-over';
-                }
             }
-            return carvedAny;
+            if (carved) {
+                tCtx.globalCompositeOperation = 'destination-out'; 
+                tCtx.beginPath(); 
+                tCtx.arc(cx, cy, radius, 0, Math.PI * 2); 
+                tCtx.fill(); 
+                tCtx.globalCompositeOperation = 'source-over';
+            }
+            return carved;
         }
 
         function buildTerrain(cx, cy, width, height) {
@@ -501,60 +487,42 @@
                         if (lem.buildCount > 0 && !isSolid(stepX, stepY)) { buildTerrain((lem.facing > 0) ? stepX : stepX - 8, stepY, 8, 3); lem.x += lem.facing * 8; lem.y -= 3; lem.buildCount--; } else { lem.state = 'walking'; lem.vx = lem.facing * 0.8; }
                     }
                 }
+                // ★ [원작 마이크로 스텝] 수직파기(Digger): 4프레임마다 7px 반경을 깎고 1px씩 부드럽게 하강
                 else if (lem.state === 'digging') {
                     lem.vx = 0; lem.actionTimer++;
-                    // 수직파기 도중에 흙 먼지 가루 흩날리는 효과
-                    if (lem.actionTimer % 3 === 0) {
-                        gCtx.fillStyle = "rgba(139, 69, 19, 0.7)";
-                        gCtx.beginPath();
-                        gCtx.arc(lem.x + (Math.random() * 16 - 8), footY + 2, 2.5, 0, Math.PI * 2);
-                        gCtx.fill();
-                    }
-                    if (lem.actionTimer >= 15) { 
+                    if (lem.actionTimer >= 4) { 
                         lem.actionTimer = 0; 
-                        if (carveTerrain(Math.floor(lem.x), footY + 3, 12)) { 
-                            lem.y += 3; 
+                        if (carveTerrain(Math.floor(lem.x), footY + 1, 7)) { 
+                            lem.y += 1; 
                         } else { 
                             lem.state = 'walking'; 
                             lem.vx = lem.facing * 0.8; 
                         } 
                     }
                 }
+                // ★ [원작 마이크로 스텝] 정면파기(Basher): 3프레임마다 8px 반경을 깎고 1px씩 부드럽게 전진
                 else if (lem.state === 'bashing') {
                     lem.vy = 0; lem.actionTimer++;
-                    // 정면파기(Basher) 흙먼지 연출
-                    if (lem.actionTimer % 3 === 0) {
-                        gCtx.fillStyle = "rgba(139, 69, 19, 0.7)";
-                        gCtx.beginPath();
-                        gCtx.arc(lem.x + (lem.facing * 10) + (Math.random() * 6 - 3), lem.y + (Math.random() * 10 - 5), 2.5, 0, Math.PI * 2);
-                        gCtx.fill();
-                    }
-                    if (lem.actionTimer >= 10) { 
+                    if (lem.actionTimer >= 3) { 
                         lem.actionTimer = 0; 
-                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 3 : -lem.radius - 3));
-                        if (carveTerrain(frontX, Math.floor(lem.y), 12)) { 
-                            lem.x += lem.facing * 3; 
+                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 2 : -lem.radius - 2));
+                        if (carveTerrain(frontX, Math.floor(lem.y), 8)) { 
+                            lem.x += lem.facing * 1; 
                         } else { 
                             lem.state = 'walking'; 
                             lem.vx = lem.facing * 0.8; 
                         }
                     }
                 }
+                // ★ [원작 마이크로 스텝] 대각파기(Miner): 4프레임마다 대각선 방향을 정밀하게 파고 들어감
                 else if (lem.state === 'mining') {
                     lem.actionTimer++;
-                    // 대각파기(Miner) 흙먼지 연출
-                    if (lem.actionTimer % 3 === 0) {
-                        gCtx.fillStyle = "rgba(139, 69, 19, 0.7)";
-                        gCtx.beginPath();
-                        gCtx.arc(lem.x + (lem.facing * 8) + (Math.random() * 6 - 3), footY + 2, 2.5, 0, Math.PI * 2);
-                        gCtx.fill();
-                    }
-                    if (lem.actionTimer >= 15) { 
+                    if (lem.actionTimer >= 4) { 
                         lem.actionTimer = 0; 
-                        let targetX = Math.floor(lem.x + lem.facing * 6);
-                        if (carveTerrain(targetX, footY + 3, 12)) { 
-                            lem.x += lem.facing * 3; 
-                            lem.y += 3; 
+                        let targetX = Math.floor(lem.x + lem.facing * 4);
+                        if (carveTerrain(targetX, footY + 2, 8)) { 
+                            lem.x += lem.facing * 1; 
+                            lem.y += 1; 
                         } else { 
                             lem.state = 'walking'; 
                             lem.vx = lem.facing * 0.8; 
