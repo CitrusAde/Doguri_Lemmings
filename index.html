@@ -156,7 +156,6 @@
 
     <script>
         // --- [★ 시스템 상수 ★] ---
-        // VIEW_W: 눈에 보이는 창 크기 / MAP_W: 맵의 실제 전체 길이 (동적 조절)
         const VIEW_W = 960; 
         const CANVAS_H = 540;
         let MAP_W = 960; 
@@ -174,7 +173,7 @@
                 bgStyle: "#1a2a3a",
                 spawns: [{x: 100, y: 100}],
                 exits: [{x: 1800, y: 450}],
-                customWidth: 1920 // 코드 생성 맵의 길이를 임의로 지정
+                customWidth: 1920
             },
             {
                 id: "stage_2",
@@ -209,7 +208,7 @@
             });
         }
 
-        // --- 에디터 (에디터는 기본 960 고정) ---
+        // --- 에디터 ---
         const edCanvas = document.getElementById('editorCanvas'); const edCtx = edCanvas.getContext('2d', { willReadFrequently: true });
         const ovCanvas = document.getElementById('editorOverlay'); const ovCtx = ovCanvas.getContext('2d');
         let editorSpawns = []; let editorExits = []; let currentTool = 'brush'; let isDrawing = false;
@@ -272,7 +271,7 @@
 
         // ★ 카메라 패닝 (드래그) 시스템 ★
         let isDraggingMap = false;
-        let isDragMoved = false; // 드래그를 한 건지 그냥 클릭한 건지 구분
+        let isDragMoved = false; 
         let dragStartX = 0;
         let scrollStartLeft = 0;
 
@@ -283,19 +282,18 @@
         window.addEventListener('mousemove', (e) => {
             if (isDraggingMap) {
                 const dx = e.clientX - dragStartX;
-                if (Math.abs(dx) > 5) isDragMoved = true; // 5px 이상 움직이면 드래그로 판정
+                if (Math.abs(dx) > 5) isDragMoved = true; 
                 gameWrapper.scrollLeft = scrollStartLeft - dx;
             }
         });
         window.addEventListener('mouseup', () => { isDraggingMap = false; });
 
         // ★ 스킬 사용 (클릭) ★
-        // 래퍼가 스크롤되어 있으므로, 캔버스 내부 상대 좌표를 계산해야 합니다.
         gameWrapper.addEventListener('mouseup', (e) => {
-            if (isDragMoved) return; // 드래그 중이었다면 스킬 취소 (이동만 함)
+            if (isDragMoved) return; 
             
             const rect = gCanvas.getBoundingClientRect();
-            const clickX = e.clientX - rect.left; // 스크롤이 반영된 맵 상의 실제 X 좌표
+            const clickX = e.clientX - rect.left; 
             const clickY = e.clientY - rect.top;
             
             if (skills[selectedSkill].count <= 0) return alert("스킬 횟수 소진!");
@@ -322,19 +320,18 @@
         window.addEventListener('mouseup', () => { isMinimapDragging = false; });
         function moveCameraToMinimap(e) {
             const rect = mCanvas.getBoundingClientRect();
-            const ratio = (e.clientX - rect.left) / 340; // 미니맵 가로 340 기준 비율
-            gameWrapper.scrollLeft = (ratio * MAP_W) - (VIEW_W / 2); // 클릭한 곳이 중앙에 오도록 이동
+            const ratio = (e.clientX - rect.left) / 340; 
+            gameWrapper.scrollLeft = (ratio * MAP_W) - (VIEW_W / 2); 
         }
 
-        // 맵 길이 동적 조정 함수
         function setMapResolution(width) {
-            MAP_W = Math.min(Math.max(width, 960), 1920); // 최소 960 ~ 최대 1920
+            MAP_W = Math.min(Math.max(width, 960), 1920); 
             bCanvas.width = MAP_W; tCanvas.width = MAP_W; gCanvas.width = MAP_W;
         }
 
         function loadStageData(stageData) {
             currentStageInfo = stageData;
-            gameWrapper.scrollLeft = 0; // 시작 시 화면을 맨 왼쪽으로
+            gameWrapper.scrollLeft = 0; 
             gameWrapper.style.background = stageData.bgStyle || "#1a2a3a";
 
             if (stageData.isDefault) {
@@ -346,7 +343,7 @@
                 tCtx.fillRect(200, 180, 400, 300);
                 tCtx.fillRect(600, 300, 200, 180);
                 tCtx.fillRect(40, 480, MAP_W - 80, 60);
-                if(MAP_W > 1000) tCtx.fillRect(1000, 300, 400, 180); // 맵이 길면 플랫폼 추가
+                if(MAP_W > 1000) tCtx.fillRect(1000, 300, 400, 180); 
                 
                 scanTerrainToMap(); startEngine();
             } else {
@@ -415,27 +412,47 @@
             return microMap[r][c] === 1 || microMap[r][c] === 4; 
         }
 
+        // ★ 버그가 수정된 부드러운 지형 파괴 함수 ★
         function carveTerrain(cx, cy, radius) {
-            let carved = false;
-            // 3번 정도 반복해서 겹쳐 파내면 훨씬 부드러운 모양이 나옵니다.
+            let carvedAny = false;
+            
+            // 한 번에 원 전체를 쾅 지우지 않고, 중심점을 무작위로 미세하게 움직이며 3회 겹쳐 지웁니다.
             for (let i = 0; i < 3; i++) {
-                let rx = cx + (Math.random() * 6 - 3);
-                let ry = cy + (Math.random() * 6 - 3);
-                let startC = Math.max(0, rx - radius); let endC = Math.min(MAP_W - 1, rx + radius);
-                let startR = Math.max(0, ry - radius); let endR = Math.min(CANVAS_H - 1, ry + radius);
+                let rx = Math.floor(cx + (Math.random() * 6 - 3));
+                let ry = Math.floor(cy + (Math.random() * 6 - 3));
                 
+                let startC = Math.max(0, rx - radius); 
+                let endC = Math.min(MAP_W - 1, rx + radius);
+                let startR = Math.max(0, ry - radius); 
+                let endR = Math.min(CANVAS_H - 1, ry + radius);
+                
+                let localCarved = false;
+                
+                // 2차원 배열 데이터 갱신
                 for (let r = startR; r <= endR; r++) {
                     for (let c = startC; c <= endC; c++) {
-                        if (Math.hypot(c - rx, r - ry) <= radius && microMap[r][c] !== 0) { microMap[r][c] = 0; carved = true; }
+                        if (Math.hypot(c - rx, r - ry) <= radius) {
+                            if (microMap[r][c] !== 0) {
+                                microMap[r][c] = 0;
+                                localCarved = true;
+                                carvedAny = true;
+                            }
+                        }
                     }
                 }
-                if(carved) {
-                    tCtx.globalCompositeOperation = 'destination-out'; tCtx.beginPath(); 
-                    tCtx.arc(rx, ry, radius, 0, Math.PI * 2); tCtx.fill(); tCtx.globalCompositeOperation = 'source-over';
+                
+                // 캔버스 화면 드로잉 갱신
+                if (localCarved) {
+                    tCtx.globalCompositeOperation = 'destination-out';
+                    tCtx.beginPath(); 
+                    tCtx.arc(rx, ry, radius, 0, Math.PI * 2); 
+                    tCtx.fill(); 
+                    tCtx.globalCompositeOperation = 'source-over';
                 }
             }
-            return carved;
+            return carvedAny;
         }
+
         function buildTerrain(cx, cy, width, height) {
             for(let r = cy; r < cy + height; r++) {
                 for(let c = cx; c < cx + width; c++) {
@@ -446,14 +463,11 @@
 
         function renderMinimap() {
             mCtx.fillStyle = '#000'; mCtx.fillRect(0, 0, 340, 100);
-            // 깎여나간 현재의 지형을 미니맵에 축소해서 그림
             mCtx.drawImage(tCanvas, 0, 0, MAP_W, CANVAS_H, 0, 0, 340, 100);
             
-            // 초록색 도구리 마커
             mCtx.fillStyle = '#00ff00';
             for (let lem of lemmings) { mCtx.fillRect((lem.x / MAP_W) * 340, (lem.y / CANVAS_H) * 100, 2, 2); }
             
-            // 하얀색 현재 뷰포트(카메라) 박스
             mCtx.strokeStyle = '#fff'; mCtx.lineWidth = 1.5;
             let viewX = (gameWrapper.scrollLeft / MAP_W) * 340;
             let viewW = (VIEW_W / MAP_W) * 340;
@@ -489,25 +503,62 @@
                 }
                 else if (lem.state === 'digging') {
                     lem.vx = 0; lem.actionTimer++;
-                    // 먼지 효과 (먼지가 튀는 애니메이션)
+                    // 수직파기 도중에 흙 먼지 가루 흩날리는 효과
                     if (lem.actionTimer % 3 === 0) {
-                        gCtx.fillStyle = "rgba(139, 69, 19, 0.5)";
+                        gCtx.fillStyle = "rgba(139, 69, 19, 0.7)";
                         gCtx.beginPath();
-                        gCtx.arc(lem.x + (Math.random() * 20 - 10), footY + 3, 3, 0, Math.PI * 2);
+                        gCtx.arc(lem.x + (Math.random() * 16 - 8), footY + 2, 2.5, 0, Math.PI * 2);
                         gCtx.fill();
                     }
-                    if (lem.actionTimer >= 15) { lem.actionTimer = 0; if (carveTerrain(Math.floor(lem.x), footY + 3, 12)) { lem.y += 3; } else { lem.state = 'walking'; lem.vx = lem.facing * 0.8; } }
+                    if (lem.actionTimer >= 15) { 
+                        lem.actionTimer = 0; 
+                        if (carveTerrain(Math.floor(lem.x), footY + 3, 12)) { 
+                            lem.y += 3; 
+                        } else { 
+                            lem.state = 'walking'; 
+                            lem.vx = lem.facing * 0.8; 
+                        } 
+                    }
                 }
                 else if (lem.state === 'bashing') {
                     lem.vy = 0; lem.actionTimer++;
-                    if (lem.actionTimer >= 10) { lem.actionTimer = 0; let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 3 : -lem.radius - 3));
-                        if (carveTerrain(frontX, Math.floor(lem.y), 12)) { lem.x += lem.facing * 3; } else { lem.state = 'walking'; lem.vx = lem.facing * 0.8; }
+                    // 정면파기(Basher) 흙먼지 연출
+                    if (lem.actionTimer % 3 === 0) {
+                        gCtx.fillStyle = "rgba(139, 69, 19, 0.7)";
+                        gCtx.beginPath();
+                        gCtx.arc(lem.x + (lem.facing * 10) + (Math.random() * 6 - 3), lem.y + (Math.random() * 10 - 5), 2.5, 0, Math.PI * 2);
+                        gCtx.fill();
+                    }
+                    if (lem.actionTimer >= 10) { 
+                        lem.actionTimer = 0; 
+                        let frontX = Math.floor(lem.x + (lem.facing > 0 ? lem.radius + 3 : -lem.radius - 3));
+                        if (carveTerrain(frontX, Math.floor(lem.y), 12)) { 
+                            lem.x += lem.facing * 3; 
+                        } else { 
+                            lem.state = 'walking'; 
+                            lem.vx = lem.facing * 0.8; 
+                        }
                     }
                 }
                 else if (lem.state === 'mining') {
                     lem.actionTimer++;
-                    if (lem.actionTimer >= 15) { lem.actionTimer = 0; let targetX = Math.floor(lem.x + lem.facing * 6);
-                        if (carveTerrain(targetX, footY + 3, 12)) { lem.x += lem.facing * 3; lem.y += 3; } else { lem.state = 'walking'; lem.vx = lem.facing * 0.8; }
+                    // 대각파기(Miner) 흙먼지 연출
+                    if (lem.actionTimer % 3 === 0) {
+                        gCtx.fillStyle = "rgba(139, 69, 19, 0.7)";
+                        gCtx.beginPath();
+                        gCtx.arc(lem.x + (lem.facing * 8) + (Math.random() * 6 - 3), footY + 2, 2.5, 0, Math.PI * 2);
+                        gCtx.fill();
+                    }
+                    if (lem.actionTimer >= 15) { 
+                        lem.actionTimer = 0; 
+                        let targetX = Math.floor(lem.x + lem.facing * 6);
+                        if (carveTerrain(targetX, footY + 3, 12)) { 
+                            lem.x += lem.facing * 3; 
+                            lem.y += 3; 
+                        } else { 
+                            lem.state = 'walking'; 
+                            lem.vx = lem.facing * 0.8; 
+                        }
                     }
                 }
                 else if (lem.state === 'climbing') {
@@ -549,7 +600,7 @@
                 if (lem.isFloater && lem.fallDist > 8) { gCtx.beginPath(); gCtx.arc(lem.x, lem.y - 12, 10, Math.PI, 0); gCtx.strokeStyle = '#fff'; gCtx.lineWidth = 1.5; gCtx.stroke(); }
             }
             
-            renderMinimap(); // 미니맵 실시간 업데이트
+            renderMinimap(); 
             loopTimer = requestAnimationFrame(gameLoop);
         }
     </script>
