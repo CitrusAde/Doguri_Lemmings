@@ -417,15 +417,22 @@
 
         function carveTerrain(cx, cy, radius) {
             let carved = false;
-            let startC = Math.max(0, cx - radius); let endC = Math.min(MAP_W - 1, cx + radius);
-            let startR = Math.max(0, cy - radius); let endR = Math.min(CANVAS_H - 1, cy + radius);
-            for (let r = startR; r <= endR; r++) {
-                for (let c = startC; c <= endC; c++) {
-                    if (Math.hypot(c - cx, r - cy) <= radius && microMap[r][c] !== 0) { microMap[r][c] = 0; carved = true; }
+            // 3번 정도 반복해서 겹쳐 파내면 훨씬 부드러운 모양이 나옵니다.
+            for (let i = 0; i < 3; i++) {
+                let rx = cx + (Math.random() * 6 - 3);
+                let ry = cy + (Math.random() * 6 - 3);
+                let startC = Math.max(0, rx - radius); let endC = Math.min(MAP_W - 1, rx + radius);
+                let startR = Math.max(0, ry - radius); let endR = Math.min(CANVAS_H - 1, ry + radius);
+                
+                for (let r = startR; r <= endR; r++) {
+                    for (let c = startC; c <= endC; c++) {
+                        if (Math.hypot(c - rx, r - ry) <= radius && microMap[r][c] !== 0) { microMap[r][c] = 0; carved = true; }
+                    }
                 }
-            }
-            if(carved) {
-                tCtx.globalCompositeOperation = 'destination-out'; tCtx.beginPath(); tCtx.arc(cx, cy, radius, 0, Math.PI * 2); tCtx.fill(); tCtx.globalCompositeOperation = 'source-over';
+                if(carved) {
+                    tCtx.globalCompositeOperation = 'destination-out'; tCtx.beginPath(); 
+                    tCtx.arc(rx, ry, radius, 0, Math.PI * 2); tCtx.fill(); tCtx.globalCompositeOperation = 'source-over';
+                }
             }
             return carved;
         }
@@ -482,6 +489,13 @@
                 }
                 else if (lem.state === 'digging') {
                     lem.vx = 0; lem.actionTimer++;
+                    // 먼지 효과 (먼지가 튀는 애니메이션)
+                    if (lem.actionTimer % 3 === 0) {
+                        gCtx.fillStyle = "rgba(139, 69, 19, 0.5)";
+                        gCtx.beginPath();
+                        gCtx.arc(lem.x + (Math.random() * 20 - 10), footY + 3, 3, 0, Math.PI * 2);
+                        gCtx.fill();
+                    }
                     if (lem.actionTimer >= 15) { lem.actionTimer = 0; if (carveTerrain(Math.floor(lem.x), footY + 3, 12)) { lem.y += 3; } else { lem.state = 'walking'; lem.vx = lem.facing * 0.8; } }
                 }
                 else if (lem.state === 'bashing') {
