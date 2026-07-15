@@ -422,10 +422,16 @@
         }
 
         function gameLoop() {
-            gCtx.imageSmoothingEnabled = false; gCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            gCtx.imageSmoothingEnabled = false; 
+            gCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+            // ▼▼▼ 여기에 임시 추가! 컴퓨터가 벽(흙)으로 인식한 곳을 반투명 빨간색으로 칠해줍니다. ▼▼▼
+            gCtx.fillStyle = "rgba(255, 0, 0, 0.3)";
+            for(let r=0; r<CANVAS_H; r+=4) { for(let c=0; c<CANVAS_W; c+=4) { if(microMap[r][c]===1) gCtx.fillRect(c, r, 4, 4); } }
+            // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
             for (let i = lemmings.length - 1; i >= 0; i--) {
-                let lem = lemmings[i]; let footY = Math.floor(lem.y + lem.radius + 1);
+                // ... 기존 레밍즈 물리 엔진 코드 ...
 
                 let escaped = false;
                 for(let ex of currentStageInfo.exits) { if (Math.hypot(lem.x - ex.x, lem.y - ex.y) < 20) { escaped = true; break; } }
