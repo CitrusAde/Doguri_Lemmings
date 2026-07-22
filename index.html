@@ -2,335 +2,400 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>세상에서 가장 어려운 게임 - 10개 스테이지 완결판</title>
+  <title>프로젝트 좀보이드 - 2D 생존 프로토타입</title>
   <style>
-    body { background: #222; color: #fff; font-family: 'Malgun Gothic', sans-serif; text-align: center; margin-top: 20px; }
-    #game-container { display: inline-block; box-shadow: 0 0 30px rgba(0,0,0,0.8); border: 4px solid #444; background: #bba; }
-    canvas { display: block; }
-    .ui-panel { background: #111; padding: 10px 20px; font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; border-bottom: 2px solid #444; }
-    .death-count { color: #ff4757; }
-    .coin-count { color: #ffa502; }
-    .level-title { color: #2ed573; }
+    body { background: #111; color: #ddd; font-family: 'Malgun Gothic', sans-serif; text-align: center; margin: 0; padding: 10px; user-select: none; }
+    #game-wrapper { display: inline-block; position: relative; border: 4px solid #333; box-shadow: 0 0 30px rgba(0,0,0,0.9); }
+    canvas { display: block; background: #222; cursor: crosshair; }
+    #ui-layer { position: absolute; top: 15px; right: 15px; width: 180px; pointer-events: none; text-align: right; }
+    .moodle { display: none; background: rgba(0,0,0,0.8); border: 2px solid #555; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; font-weight: bold; font-size: 14px; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); animation: pulse 1.5s infinite alternate; }
+    @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.03); } }
+    .moodle.panic { border-color: #ff4757; color: #ff4757; }
+    .moodle.tired { border-color: #ffa502; color: #ffa502; }
+    .moodle.bleed { border-color: #ff6b81; color: #ff6b81; }
+    #stats { position: absolute; top: 15px; left: 15px; text-align: left; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; border: 1px solid #444; pointer-events: none; }
+    .bar-wrap { width: 150px; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-top: 4px; border: 1px solid #000; }
+    .bar { height: 100%; transition: width 0.1s; }
   </style>
 </head>
 <body>
 
-  <h2>🛑 세상에서 가장 어려운 게임 (총 10 스테이지)</h2>
-  
-  <div id="game-container">
-    <div class="ui-panel">
-      <span class="level-title">LEVEL <span id="level-num">1</span> / 10</span>
-      <span class="coin-count">COINS: <span id="coins">0</span> / <span id="total-coins">2</span></span>
-      <span class="death-count">TOTAL DEATHS: <span id="deaths">0</span></span>
+  <div id="game-wrapper">
+    <canvas id="canvas" width="800" height="600"></canvas>
+    
+    <!-- 좌측 상단: 생존 스탯 -->
+    <div id="stats">
+      <div style="font-size: 13px; font-weight: bold;">❤️ 체력 (HP)</div>
+      <div class="bar-wrap"><div id="hp-bar" class="bar" style="width: 100%; background: #ff4757;"></div></div>
+      <div style="font-size: 13px; font-weight: bold; margin-top: 8px;">⚡ 스태미나</div>
+      <div class="bar-wrap"><div id="stm-bar" class="bar" style="width: 100%; background: #2ed573;"></div></div>
     </div>
-    <canvas id="canvas" width="600" height="400"></canvas>
+
+    <!-- 우측 상단: 모들(Moodles) 상태 이상 UI -->
+    <div id="ui-layer">
+      <div id="moodle-panic" class="moodle panic">😱 극심한 패닉<br><span style="font-size:11px; font-weight:normal; color:#aaa;">시야각 대폭 감소</span></div>
+      <div id="moodle-tired" class="moodle tired">🥵 지침 (숨 헐떡임)<br><span style="font-size:11px; font-weight:normal; color:#aaa;">이동/공격 속도 저하</span></div>
+      <div id="moodle-bleed" class="moodle bleed">🩸 출혈 중<br><span style="font-size:11px; font-weight:normal; color:#aaa;">체력 지속 감소</span></div>
+    </div>
   </div>
   
-  <p style="color: #aaa; margin-top: 15px;">🎮 <b>조작법:</b> 방향키 (↑, ↓, ←, →)로 이동<br>💡 각 스테이지의 노란 코인을 모두 먹고 오른쪽 초록색 안전지대로 가세요!</p>
+  <p style="color: #888; font-size: 14px;">
+    🎮 <b>조작법:</b> [W, A, S, D] 이동 | [Shift + 이동] 달리기 (소음 발생!) | [마우스 이동] 조준 | [좌클릭] 야구 빠따 휘두르기<br>
+    💡 <b>핵심:</b> 좀비는 시야 뒤(어둠 속)에서 갑자기 나타납니다. 뛰거나 무기를 휘두르면 소음을 듣고 벽 뒤에서도 몰려듭니다!
+  </p>
 
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    
-    let totalDeaths = 0;
-    let coinsCollected = 0;
-    let currentLevelIdx = 0;
 
-    // 키보드 입력 상태 관리
-    const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, Up: false, Down: false, Left: false, Right: false };
+    // 어둠(그림자) 렌더링을 위한 오프스크린 캔버스
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = canvas.width;
+    shadowCanvas.height = canvas.height;
+    const sCtx = shadowCanvas.getContext('2d');
 
-    // 💡 핵심 버그 해결: 키보드 눌림 상태 강제 초기화 함수
-    function resetKeys() {
-      for (let k in keys) { keys[k] = false; }
-    }
+    // 게임 상태
+    const keys = {};
+    const mouse = { x: 400, y: 300 };
+    let bloodStains = [];
 
-    window.addEventListener('keydown', (e) => { 
-      if (keys.hasOwnProperty(e.code) || keys.hasOwnProperty(e.key)) { 
-        if (e.code) keys[e.code] = true;
-        if (e.key) keys[e.key] = true;
-        e.preventDefault(); 
-      } 
-    });
-    
-    window.addEventListener('keyup', (e) => { 
-      if (keys.hasOwnProperty(e.code) || keys.hasOwnProperty(e.key)) { 
-        if (e.code) keys[e.code] = false;
-        if (e.key) keys[e.key] = false;
-      } 
+    window.addEventListener('keydown', e => keys[e.code.toLowerCase()] = true);
+    window.addEventListener('keyup', e => keys[e.code.toLowerCase()] = false);
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
     });
 
-    const zones = {
-      start: { x: 0, y: 100, width: 120, height: 200 },
-      end: { x: 480, y: 100, width: 120, height: 200 },
-      playArea: { x: 0, y: 100, width: 600, height: 200 }
-    };
-
-    const player = {
-      x: 50, y: 190, size: 22, speed: 3.5,
-      reset() { this.x = 50; this.y = 190; }
-    };
-
-    // ==========================================
-    // 📂 총 10개의 지옥급 레벨 디자인
-    // ==========================================
-    const levels = [
-      // 1탄: 몸풀기 (속도 2.5 교차)
-      {
-        coins: [ { x: 250, y: 200, radius: 8 }, { x: 350, y: 200, radius: 8 } ],
-        enemies: [
-          { type: 'linear', x: 170, y: 120, radius: 10, speedY: 2.5 },
-          { type: 'linear', x: 210, y: 280, radius: 10, speedY: -2.5 },
-          { type: 'linear', x: 250, y: 120, radius: 10, speedY: 2.5 },
-          { type: 'linear', x: 290, y: 280, radius: 10, speedY: -2.5 },
-          { type: 'linear', x: 330, y: 120, radius: 10, speedY: 2.5 },
-          { type: 'linear', x: 370, y: 280, radius: 10, speedY: -2.5 },
-          { type: 'linear', x: 410, y: 120, radius: 10, speedY: 2.5 }
-        ]
-      },
-      // 2탄: 중앙 풍차 회전
-      {
-        coins: [ { x: 300, y: 130, radius: 8 }, { x: 300, y: 270, radius: 8 } ],
-        enemies: [
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 40, angle: 0, speed: 0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 80, angle: 0, speed: 0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 120, angle: 0, speed: 0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 40, angle: Math.PI, speed: 0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 80, angle: Math.PI, speed: 0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 120, angle: Math.PI, speed: 0.05, radius: 10 }
-        ]
-      },
-      // 3탄: 고속 질주 (속도 4.5)
-      {
-        coins: [ { x: 200, y: 200, radius: 8 }, { x: 300, y: 200, radius: 8 }, { x: 400, y: 200, radius: 8 } ],
-        enemies: [
-          { type: 'linear', x: 160, y: 120, radius: 10, speedY: 4.5 },
-          { type: 'linear', x: 220, y: 280, radius: 10, speedY: -4.5 },
-          { type: 'linear', x: 280, y: 120, radius: 10, speedY: 4.5 },
-          { type: 'linear', x: 340, y: 280, radius: 10, speedY: -4.5 },
-          { type: 'linear', x: 400, y: 120, radius: 10, speedY: 4.5 },
-          { type: 'linear', x: 440, y: 280, radius: 10, speedY: -4.5 }
-        ]
-      },
-      // 4탄: 쌍둥이 풍차 (좌우에서 돌기)
-      {
-        coins: [ { x: 210, y: 200, radius: 8 }, { x: 390, y: 200, radius: 8 } ],
-        enemies: [
-          { type: 'rotate', centerX: 210, centerY: 200, dist: 45, angle: 0, speed: 0.06, radius: 10 },
-          { type: 'rotate', centerX: 210, centerY: 200, dist: 45, angle: Math.PI, speed: 0.06, radius: 10 },
-          { type: 'rotate', centerX: 390, centerY: 200, dist: 45, angle: 0, speed: -0.06, radius: 10 },
-          { type: 'rotate', centerX: 390, centerY: 200, dist: 45, angle: Math.PI, speed: -0.06, radius: 10 }
-        ]
-      },
-      // 5탄: 통곡의 벽 ( 2개씩 짝지어 움직이는 밀집 구역)
-      {
-        coins: [ { x: 300, y: 150, radius: 8 } ],
-        enemies: [
-          { type: 'linear', x: 180, y: 120, radius: 10, speedY: 3.5 }, { type: 'linear', x: 210, y: 120, radius: 10, speedY: 3.5 },
-          { type: 'linear', x: 270, y: 280, radius: 10, speedY: -3.5 }, { type: 'linear', x: 300, y: 280, radius: 10, speedY: -3.5 },
-          { type: 'linear', x: 360, y: 120, radius: 10, speedY: 3.5 }, { type: 'linear', x: 390, y: 120, radius: 10, speedY: 3.5 },
-          { type: 'linear', x: 450, y: 280, radius: 10, speedY: -3.5 }
-        ]
-      },
-      // 6탄: 태양계 궤도 (속도와 방향이 다른 3중 회전)
-      {
-        coins: [ { x: 300, y: 120, radius: 8 }, { x: 300, y: 280, radius: 8 } ],
-        enemies: [
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 35, angle: 0, speed: 0.08, radius: 9 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 35, angle: Math.PI, speed: 0.08, radius: 9 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 70, angle: 0, speed: -0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 70, angle: Math.PI, speed: -0.05, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 105, angle: 0, speed: 0.03, radius: 11 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 105, angle: Math.PI, speed: 0.03, radius: 11 }
-        ]
-      },
-      // 7탄: 불규칙 엘리베이터 (속도가 전부 제각각)
-      {
-        coins: [ { x: 180, y: 200, radius: 8 }, { x: 300, y: 200, radius: 8 }, { x: 420, y: 200, radius: 8 } ],
-        enemies: [
-          { type: 'linear', x: 150, y: 120, radius: 10, speedY: 2.0 },
-          { type: 'linear', x: 190, y: 280, radius: 10, speedY: -4.5 },
-          { type: 'linear', x: 230, y: 120, radius: 10, speedY: 3.0 },
-          { type: 'linear', x: 270, y: 280, radius: 10, speedY: -5.5 },
-          { type: 'linear', x: 310, y: 120, radius: 10, speedY: 1.5 },
-          { type: 'linear', x: 350, y: 280, radius: 10, speedY: -4.0 },
-          { type: 'linear', x: 390, y: 120, radius: 10, speedY: 6.0 },
-          { type: 'linear', x: 430, y: 280, radius: 10, speedY: -2.5 }
-        ]
-      },
-      // 8탄: 혼돈의 믹서기 (중앙에서 서로 반대로 도는 회전 십자가)
-      {
-        coins: [ { x: 220, y: 200, radius: 8 }, { x: 380, y: 200, radius: 8 } ],
-        enemies: [
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 50, angle: 0, speed: 0.06, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 50, angle: Math.PI, speed: 0.06, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 50, angle: Math.PI/2, speed: -0.06, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 50, angle: Math.PI*1.5, speed: -0.06, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 90, angle: 0, speed: -0.04, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 90, angle: Math.PI, speed: -0.04, radius: 10 }
-        ]
-      },
-      // 9탄: 문지기와 풍차 (입구/출구 직선 탄막 + 중앙 풍차)
-      {
-        coins: [ { x: 300, y: 200, radius: 8 } ],
-        enemies: [
-          // 입구 문지기
-          { type: 'linear', x: 160, y: 120, radius: 10, speedY: 4.0 },
-          { type: 'linear', x: 200, y: 280, radius: 10, speedY: -4.0 },
-          // 중앙 풍차
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 60, angle: 0, speed: 0.07, radius: 10 },
-          { type: 'rotate', centerX: 300, centerY: 200, dist: 60, angle: Math.PI, speed: 0.07, radius: 10 },
-          // 출구 문지기
-          { type: 'linear', x: 400, y: 120, radius: 10, speedY: 4.0 },
-          { type: 'linear', x: 440, y: 280, radius: 10, speedY: -4.0 }
-        ]
-      },
-      // 10탄: 👑 최종 보스 (극도의 피지컬 요구 - 4개의 회전축과 고속 탄막)
-      {
-        coins: [ { x: 210, y: 150, radius: 8 }, { x: 210, y: 250, radius: 8 }, { x: 390, y: 150, radius: 8 }, { x: 390, y: 250, radius: 8 } ],
-        enemies: [
-          { type: 'linear', x: 150, y: 120, radius: 10, speedY: 5.0 },
-          { type: 'rotate', centerX: 230, centerY: 200, dist: 40, angle: 0, speed: 0.08, radius: 9 },
-          { type: 'rotate', centerX: 230, centerY: 200, dist: 40, angle: Math.PI, speed: 0.08, radius: 9 },
-          { type: 'linear', x: 300, y: 280, radius: 10, speedY: -6.0 }, // 중앙 초고속 바늘
-          { type: 'rotate', centerX: 370, centerY: 200, dist: 40, angle: 0, speed: -0.08, radius: 9 },
-          { type: 'rotate', centerX: 370, centerY: 200, dist: 40, angle: Math.PI, speed: -0.08, radius: 9 },
-          { type: 'linear', x: 450, y: 120, radius: 10, speedY: 5.0 }
-        ]
-      }
+    // 벽 (장애물 - 시야를 가리고 소음을 일부 차단)
+    const walls = [
+      { x: 150, y: 100, w: 20, h: 250 }, { x: 170, y: 100, w: 150, h: 20 },
+      { x: 450, y: 150, w: 200, h: 20 }, { x: 450, y: 170, w: 20, h: 180 },
+      { x: 200, y: 450, w: 300, h: 20 }, { x: 500, y: 400, w: 20, h: 150 },
+      { x: 50, y: 350, w: 80, h: 20 }
     ];
 
-    let activeCoins = [];
-    let activeEnemies = [];
+    // 플레이어 객체
+    const player = {
+      x: 400, y: 300, radius: 16, speed: 2.2,
+      hp: 100, maxHp: 100, stamina: 100, maxStamina: 100,
+      angle: 0, noiseRadius: 0,
+      isAttack: false, attackAngle: 0, attackTimer: 0, attackCooldown: 0,
+      panic: 0, isBleeding: false,
 
-    function loadLevel(idx) {
-      resetKeys(); // 💡 로드 직전 키보드 상태 강제 0으로 초기화
+      update() {
+        // 1. 마우스 바라보기 (패닉 시 수전증으로 조준이 미세하게 떨림)
+        const jitter = this.panic > 0 ? (Math.random() - 0.5) * 0.15 : 0;
+        this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x) + jitter;
 
-      if (idx >= levels.length) {
-        alert("🏆 미쳤습니다!! 대망의 10스테이지를 모두 클리어하셨습니다! (총 사망: " + totalDeaths + "회)");
-        currentLevelIdx = 0;
-        totalDeaths = 0;
-        document.getElementById('deaths').innerText = totalDeaths;
-        loadLevel(0);
-        return;
-      }
+        // 2. 이동 및 스태미나 (Shift 달리기)
+        let moveSpeed = this.speed;
+        const isSprinting = (keys['shiftleft'] || keys['shiftright']) && this.stamina > 0;
+        
+        if (isSprinting && (keys['keyw'] || keys['keys'] || keys['keya'] || keys['keyd'])) {
+          moveSpeed *= 1.8;
+          this.stamina = Math.max(0, this.stamina - 0.4);
+          this.noiseRadius = 180; // 달리면 발소리 소음 확산!
+        } else {
+          this.stamina = Math.min(this.maxStamina, this.stamina + 0.2);
+          this.noiseRadius = (keys['keyw'] || keys['keys'] || keys['keya'] || keys['keyd']) ? 55 : 10;
+        }
 
-      const levelData = JSON.parse(JSON.stringify(levels[idx]));
-      activeCoins = levelData.coins.map(c => ({ ...c, collected: false }));
-      activeEnemies = levelData.enemies;
-      
-      coinsCollected = 0;
-      player.reset();
+        // 지침(Exhausted) 모들 발동 시 이동 속도 40% 저하
+        if (this.stamina < 25) moveSpeed *= 0.6;
 
-      document.getElementById('level-num').innerText = idx + 1;
-      document.getElementById('coins').innerText = coinsCollected;
-      document.getElementById('total-coins').innerText = activeCoins.length;
-    }
+        let nextX = this.x, nextY = this.y;
+        if (keys['keyw']) nextY -= moveSpeed;
+        if (keys['keys']) nextY += moveSpeed;
+        if (keys['keya']) nextX -= moveSpeed;
+        if (keys['keyd']) nextX += moveSpeed;
 
-    function resetCurrentLevel() {
-      resetKeys(); // 💡 죽었을 때도 키보드 눌림 상태 초기화
-      coinsCollected = 0;
-      document.getElementById('coins').innerText = coinsCollected;
-      activeCoins.forEach(c => c.collected = false);
-      player.reset();
-    }
+        // 벽 충돌 체크
+        if (!checkWallCollide(nextX, this.y, this.radius)) this.x = nextX;
+        if (!checkWallCollide(this.x, nextY, this.radius)) this.y = nextY;
 
-    function checkCircleBoxCollision(circle, boxX, boxY, boxSize) {
-      const closestX = Math.max(boxX, Math.min(circle.x, boxX + boxSize));
-      const closestY = Math.max(boxY, Math.min(circle.y, boxY + boxSize));
-      const distanceX = circle.x - closestX;
-      const distanceY = circle.y - closestY;
-      return (distanceX * distanceX) + (distanceY * distanceY) < (circle.radius * circle.radius);
-    }
+        // 3. 공격 처리 (야구 빠따)
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (this.isAttack) {
+          this.attackTimer--;
+          this.noiseRadius = 140; // 무기 휘두르면 소음 발생!
+          if (this.attackTimer <= 0) this.isAttack = false;
+        }
 
-    function update() {
-      let nextX = player.x;
-      let nextY = player.y;
+        // 4. 출혈 상태
+        if (this.isBleeding) {
+          this.hp Math.max(0, this.hp - 0.05);
+          if (Math.random() < 0.1) bloodStains.push({ x: this.x, y: this.y, size: 3 });
+        }
 
-      if (keys.ArrowLeft || keys.Left) nextX -= player.speed;
-      if (keys.ArrowRight || keys.Right) nextX += player.speed;
-      if (keys.ArrowUp || keys.Up) nextY -= player.speed;
-      if (keys.ArrowDown || keys.Down) nextY += player.speed;
+        // UI 모들 업데이트
+        document.getElementById('moodle-tired').style.display = (this.stamina < 25) ? 'block' : 'none';
+        document.getElementById('moodle-panic').style.display = (this.panic > 0) ? 'block' : 'none';
+        document.getElementById('moodle-bleed').style.display = (this.isBleeding) ? 'block' : 'none';
+        document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + '%';
+        document.getElementById('stm-bar').style.width = (this.stamina / this.maxStamina * 100) + '%';
 
-      if (nextX >= zones.playArea.x && nextX + player.size <= zones.playArea.x + zones.playArea.width) player.x = nextX;
-      if (nextY >= zones.playArea.y && nextY + player.size <= zones.playArea.y + zones.playArea.height) player.y = nextY;
+        if (this.hp <= 0) {
+          alert("💀 사망했습니다! 당신은 좀비의 밥이 되었습니다.");
+          location.reload();
+        }
+      },
 
-      activeEnemies.forEach(enemy => {
-        if (enemy.type === 'linear') {
-          enemy.y += enemy.speedY;
-          if (enemy.y - enemy.radius <= zones.playArea.y || enemy.y + enemy.radius >= zones.playArea.y + zones.playArea.height) {
-            enemy.speedY *= -1;
+      attack() {
+        if (this.attackCooldown > 0 || this.stamina < 10) return;
+        this.isAttack = true;
+        this.attackTimer = 12; // 공격 지속 프레임
+        this.attackCooldown = (this.stamina < 25) ? 45 : 25; // 지치면 공격 쿨타임 증가
+        this.attackAngle = this.angle;
+        this.stamina -= 8;
+
+        // 범위 내 좀비 타격 판정
+        zombies.forEach(z => {
+          const dist = Math.hypot(z.x - this.x, z.y - this.y);
+          const angleToZ = Math.atan2(z.y - this.y, z.x - this.x);
+          const diff = Math.abs(normalizeAngle(angleToZ - this.attackAngle));
+          
+          if (dist < 65 && diff < Math.PI * 0.35) {
+            z.hp -= 35;
+            // 넉백 (밀쳐내기)
+            z.x += Math.cos(this.attackAngle) * 25;
+            z.y += Math.sin(this.attackAngle) * 25;
+            for(let i=0; i<5; i++) bloodStains.push({ x: z.x + (Math.random()-0.5)*20, y: z.y + (Math.random()-0.5)*20, size: Math.random()*6+2 });
           }
-        } else if (enemy.type === 'rotate') {
-          enemy.angle += enemy.speed;
-          enemy.x = enemy.centerX + Math.cos(enemy.angle) * enemy.dist;
-          enemy.y = enemy.centerY + Math.sin(enemy.angle) * enemy.dist;
-        }
-
-        if (checkCircleBoxCollision(enemy, player.x, player.y, player.size)) {
-          totalDeaths++;
-          document.getElementById('deaths').innerText = totalDeaths;
-          resetCurrentLevel();
-        }
-      });
-
-      activeCoins.forEach(coin => {
-        if (!coin.collected && checkCircleBoxCollision(coin, player.x, player.y, player.size)) {
-          coin.collected = true;
-          coinsCollected++;
-          document.getElementById('coins').innerText = coinsCollected;
-        }
-      });
-
-      if (coinsCollected === activeCoins.length) {
-        if (player.x >= zones.end.x && player.x + player.size <= zones.end.x + zones.end.width) {
-          resetKeys(); // 💡 알림창 뜨기 전에 키보드 강제 초기화!
-          alert("🎉 LEVEL " + (currentLevelIdx + 1) + " CLEAR!");
-          resetKeys(); // 💡 알림창 닫힌 후에도 키보드 강제 초기화!
-          currentLevelIdx++;
-          loadLevel(currentLevelIdx);
-        }
+        });
       }
+    };
+
+    canvas.addEventListener('mousedown', () => player.attack());
+
+    // 좀비 생성 (유한 상태 기계 FSM 로직)
+    const zombies = [
+      { x: 100, y: 80, hp: 100, state: 'IDLE', speed: 1.2 },
+      { x: 650, y: 100, hp: 100, state: 'IDLE', speed: 1.5 },
+      { x: 700, y: 500, hp: 100, state: 'IDLE', speed: 1.3 },
+      { x: 300, y: 500, hp: 100, state: 'IDLE', speed: 1.1 },
+      { x: 500, y: 300, hp: 100, state: 'IDLE', speed: 1.6 },
+      { x: 80, y: 400, hp: 100, state: 'IDLE', speed: 1.4 }
+    ];
+
+    function updateZombies() {
+      let nearbyZombies = 0;
+
+      zombies.forEach((z, idx) => {
+        if (z.hp <= 0) {
+          for(let i=0; i<15; i++) bloodStains.push({ x: z.x + (Math.random()-0.5)*40, y: z.y + (Math.random()-0.5)*40, size: Math.random()*8+3 });
+          zombies.splice(idx, 1);
+          return;
+        }
+
+        const distToPlayer = Math.hypot(player.x - z.x, player.y - z.y);
+        if (distToPlayer < 120) nearbyZombies++;
+
+        // [FSM 상태 전환 로직]
+        // 1. 소음 감지: 플레이어의 소음 반경 안에 들어오면 즉시 추적(CHASE)
+        if (distToPlayer < player.noiseRadius) {
+          z.state = 'CHASE';
+        }
+        // 2. 시야 감지: 좀비 시선 앞 180px 안에 플레이어가 있고, 벽에 가려지지 않았다면 추적
+        else if (distToPlayer < 180 && checkLineOfSight(z.x, z.y, player.x, player.y)) {
+          z.state = 'CHASE';
+        }
+
+        // [상태별 행동]
+        if (z.state === 'CHASE') {
+          const angle = Math.atan2(player.y - z.y, player.x - z.x);
+          let nextX = z.x + Math.cos(angle) * z.speed;
+          let nextY = z.y + Math.sin(angle) * z.speed;
+
+          if (!checkWallCollide(nextX, z.y, 14)) z.x = nextX;
+          if (!checkWallCollide(z.x, nextY, 14)) z.y = nextY;
+
+          // 플레이어를 공격 (물기)
+          if (distToPlayer < player.radius + 14) {
+            player.hp -= 0.5;
+            if (Math.random() < 0.05) player.isBleeding = true; // 5% 확률로 출혈 감염!
+          }
+        } else if (z.state === 'IDLE') {
+          // 어슬렁거리기 (랜덤 배회)
+          if (Math.random() < 0.02) {
+            z.wandX = z.x + (Math.random() - 0.5) * 60;
+            z.wandY = z.y + (Math.random() - 0.5) * 60;
+          }
+          if (z.wandX) {
+            z.x += (z.wandX - z.x) * 0.02;
+            z.y += (z.wandY - z.y) * 0.02;
+          }
+        }
+      });
+
+      // 주변에 좀비가 2마리 이상 접근하면 극심한 공포(Panic) 발동!
+      player.panic = (nearbyZombies >= 2) ? 1 : 0;
     }
 
+    // ==========================================
+    // 💡 핵심 알고리즘: 레이캐스팅 & 충돌 연산
+    // ==========================================
+    function checkWallCollide(x, y, radius) {
+      return walls.some(w => x + radius > w.x && x - radius < w.x + w.w && y + radius > w.y && y - radius < w.y + w.h);
+    }
+
+    function checkLineOfSight(x1, y1, x2, y2) {
+      const dist = Math.hypot(x2 - x1, y2 - y1);
+      const steps = dist / 8;
+      for (let i = 1; i <= steps; i++) {
+        const rx = x1 + (x2 - x1) * (i / steps);
+        const ry = y1 + (y2 - y1) * (i / steps);
+        if (walls.some(w => rx > w.x && rx < w.x + w.w && ry > w.y && ry < w.y + w.h)) return false;
+      }
+      return true;
+    }
+
+    function normalizeAngle(a) {
+      while (a > Math.PI) a -= Math.PI * 2;
+      while (a < -Math.PI) a += Math.PI * 2;
+      return a;
+    }
+
+    // 💡 광선 추적(Raycasting)으로 벽에 부딪히는 시야 끝점 찾기
+    function castRay(x, y, angle, maxDist) {
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      for (let d = 0; d < maxDist; d += 5) {
+        const rx = x + cos * d, ry = y + sin * d;
+        if (walls.some(w => rx >= w.x && rx <= w.x + w.w && ry >= w.y && ry <= w.y + w.h)) {
+          return { x: rx, y: ry };
+        }
+      }
+      return { x: x + cos * maxDist, y: y + sin * maxDist };
+    }
+
+    // 좀비가 플레이어의 시야(FOV) 안에 있는지 검사 (시선 가림 & 각도)
+    function isZombieVisible(z) {
+      const dist = Math.hypot(z.x - player.x, z.y - player.y);
+      if (dist < 50) return true; // 50px 이내는 360도 소리/감각으로 근접 감지 (좀보이드 규칙!)
+      if (dist > 280) return false;
+
+      const angleToZ = Math.atan2(z.y - player.y, z.x - player.x);
+      const diff = Math.abs(normalizeAngle(angleToZ - player.angle));
+      
+      // 패닉(Panic) 상태일 때는 시야각이 108도에서 60도로 대폭 찌그러짐!
+      const currentFov = player.panic > 0 ? Math.PI * 0.33 : Math.PI * 0.6;
+      if (diff > currentFov / 2) return false;
+
+      return checkLineOfSight(player.x, player.y, z.x, z.y);
+    }
+
+    // ==========================================
+    // 🎨 게임 그래픽 렌더링
+    // ==========================================
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#e4e4fc";
-      ctx.fillRect(zones.playArea.x, zones.playArea.y, zones.playArea.width, zones.playArea.height);
 
-      ctx.fillStyle = "#b5e61d";
-      ctx.fillRect(zones.start.x, zones.start.y, zones.start.width, zones.start.height);
-      ctx.fillRect(zones.end.x, zones.end.y, zones.end.width, zones.end.height);
+      // 1. 바닥 피흔적 (영구 보존)
+      ctx.fillStyle = "#800000";
+      bloodStains.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
 
-      activeCoins.forEach(coin => {
-        if (!coin.collected) {
+      // 2. 벽 그리기
+      walls.forEach(w => {
+        ctx.fillStyle = "#444";
+        ctx.fillRect(w.x, w.y, w.w, w.h);
+        ctx.strokeStyle = "#111"; ctx.lineWidth = 2;
+        ctx.strokeRect(w.x, w.y, w.w, w.h);
+      });
+
+      // 3. 좀비 그리기 (💡 시야(FOV) 안에 들어온 좀비만 렌더링!)
+      zombies.forEach(z => {
+        if (isZombieVisible(z)) {
           ctx.beginPath();
-          ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
-          ctx.fillStyle = "#ffdd59";
+          ctx.arc(z.x, z.y, 14, 0, Math.PI * 2);
+          ctx.fillStyle = (z.state === 'CHASE') ? "#2ed573" : "#26a65b"; // 추적 중이면 밝은 초록색
           ctx.fill();
           ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke();
+          
+          // 눈 (바라보는 방향)
+          ctx.fillStyle = "#ff0000";
+          ctx.beginPath();
+          ctx.arc(z.x, z.y - 4, 3, 0, Math.PI * 2);
+          ctx.arc(z.x, z.y + 4, 3, 0, Math.PI * 2);
+          ctx.fill();
         }
       });
 
-      activeEnemies.forEach(enemy => {
-        ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#0000ff";
-        ctx.fill();
-        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-      });
+      // 4. 플레이어 그리기
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#3742fa"; ctx.fill();
+      ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke();
 
-      ctx.fillStyle = "#ff0000";
-      ctx.fillRect(player.x, player.y, player.size, player.size);
-      ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.strokeRect(player.x, player.y, player.size, player.size);
+      // 플레이어 방향 표시 (손/무기)
+      const handX = player.x + Math.cos(player.angle) * 16;
+      const handY = player.y + Math.sin(player.angle) * 16;
+      ctx.beginPath();
+      ctx.arc(handX, handY, 6, 0, Math.PI * 2);
+      ctx.fillStyle = "#f1c40f"; ctx.fill();
+
+      // 야구 빠따 공격 모션
+      if (player.isAttack) {
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.arc(player.x, player.y, 65, player.attackAngle - 0.5, player.attackAngle + 0.5);
+        ctx.fillStyle = "rgba(241, 196, 15, 0.4)";
+        ctx.fill();
+      }
+
+      // 5. 💡 그림자 & 시야각(FOV) 레이캐스팅 오버레이 렌더링
+      sCtx.clearRect(0, 0, canvas.width, canvas.height);
+      sCtx.fillStyle = "rgba(8, 8, 12, 0.92)"; // 92% 칠흑 같은 어둠
+      sCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 시야 광선(Ray)으로 밝은 영역 오프스크린 캔버스에서 뚫어내기 (destination-out)
+      sCtx.globalCompositeOperation = 'destination-out';
+      
+      // (1) 근접 감각 시야 (360도 50px - 내 바로 주변은 어둠 속에서도 잘 보임)
+      sCtx.beginPath();
+      sCtx.arc(player.x, player.y, 55, 0, Math.PI * 2);
+      sCtx.fill();
+
+      // (2) 전방 부채꼴 시야 (Raycasting Polygon)
+      sCtx.beginPath();
+      sCtx.moveTo(player.x, player.y);
+      const currentFov = player.panic > 0 ? Math.PI * 0.33 : Math.PI * 0.6;
+      const rayCount = 80; // 광선 80개 발사
+      const startAngle = player.angle - currentFov / 2;
+      const stepAngle = currentFov / rayCount;
+
+      for (let i = 0; i <= rayCount; i++) {
+        const hit = castRay(player.x, player.y, startAngle + stepAngle * i, 280);
+        sCtx.lineTo(hit.x, hit.y);
+      }
+      sCtx.closePath();
+      sCtx.fill();
+      sCtx.globalCompositeOperation = 'source-over';
+
+      // 완성된 그림자 오버레이를 메인 화면에 덮어씌우기
+      ctx.drawImage(shadowCanvas, 0, 0);
+
+      // 6. 소음 반경 UI (어둠 위쪽에 연한 선으로 표시해 플레이어에게 경고)
+      if (player.noiseRadius > 20) {
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.noiseRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = (player.noiseRadius > 100) ? "rgba(255, 71, 87, 0.4)" : "rgba(255, 255, 255, 0.15)";
+        ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     function gameLoop() {
-      update();
+      player.update();
+      updateZombies();
       draw();
       requestAnimationFrame(gameLoop);
     }
 
-    loadLevel(0);
     gameLoop();
   </script>
 </body>
