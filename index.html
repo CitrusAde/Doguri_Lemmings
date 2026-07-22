@@ -104,38 +104,15 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// --- [스프라이트 생성기] 외부 파일 없이 실행되도록 임시 스프라이트 시트 생성 ---
-// 추후 본인의 .png 이미지로 교체할 때는 이 부분 대신 new Image()를 사용하면 됩니다.
-function generateSpriteSheet(color, width, height, frames) {
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = width * frames;
-    offCanvas.height = height;
-    const offCtx = offCanvas.getContext('2d');
+// =================================================================
+// ★ 4x4 스프라이트 이미지 파일 로드 (index.html과 같은 폴더에 있어야 함)
+// =================================================================
+const normalSlashImg = new Image();
+normalSlashImg.src = '2d_Sword_fx_01.png'; // 일반 공격 (4x4)
 
-    for (let i = 0; i < frames; i++) {
-        offCtx.save();
-        offCtx.translate(i * width + width / 2, height / 2);
-        
-        // 프레임이 진행될수록 커지면서 사라지는 검기 이펙트
-        const progress = (i + 1) / frames;
-        const radius = (width / 2.2) * progress;
-        offCtx.beginPath();
-        offCtx.arc(0, 0, radius, -Math.PI * 0.4, Math.PI * 0.4);
-        offCtx.lineWidth = 15 * (1 - progress + 0.2);
-        offCtx.strokeStyle = color;
-        offCtx.shadowColor = color;
-        offCtx.shadowBlur = 15;
-        offCtx.stroke();
-        offCtx.restore();
-    }
-    const img = new Image();
-    img.src = offCanvas.toDataURL();
-    return img;
-}
-
-// 애니메이션 스프라이트 객체 생성
-const normalSlashImg = generateSpriteSheet('#3498db', 120, 120, 5); // 일반공격: 파란 검기 (5프레임)
-const heavySlashImg = generateSpriteSheet('#e74c3c', 180, 180, 6);  // 강타공격: 붉은 검기 (6프레임)
+const heavySlashImg = new Image();
+heavySlashImg.src = '2d_Sword_fx_02.png';  // 강타 공격 (4x4)
+// =================================================================
 
 // 게임 상태 변수
 let isGameOver = false;
@@ -162,7 +139,7 @@ const player = {
     animTimer: 0,
     
     // 쿨타임
-    cdNormal: 0, maxCdNormal: 20,  // 약 0.33초
+    cdNormal: 0, maxCdNormal: 25,  // 약 0.4초
     cdHeavy: 0,  maxCdHeavy: 180,  // 약 3초
 
     update() {
@@ -196,18 +173,22 @@ const player = {
             this.startAttack('heavy');
         }
 
-        // 공격 애니메이션 진행
+        // =================================================================
+        // ★ 4x4 스프라이트 (총 16프레임) 애니메이션 처리
+        // =================================================================
         if (this.isAttacking) {
             this.animTimer++;
-            const maxFrames = this.attackType === 'normal' ? 5 : 6;
-            const frameSpeed = this.attackType === 'normal' ? 3 : 4; // 프레임당 유지 시간
+            const maxFrames = 16; // 4x4 격자이므로 16프레임
+            
+            // 일반 공격은 1프레임당 1틱, 강타는 좀 더 묵직하게 2틱 유지
+            const frameSpeed = this.attackType === 'normal' ? 1 : 2; 
 
             if (this.animTimer >= frameSpeed) {
                 this.animTimer = 0;
                 this.animFrame++;
                 
-                // 타격 판정 (애니메이션 중간 프레임에 데미지 적용)
-                if (this.animFrame === 2) {
+                // 16프레임 중 5번째 프레임에 데미지 및 넉백 적용
+                if (this.animFrame === 5) {
                     this.checkHit();
                 }
 
@@ -216,6 +197,7 @@ const player = {
                 }
             }
         }
+        // =================================================================
 
         // UI 업데이트
         document.getElementById('hp-bar').style.width = `${(this.hp / this.maxHp) * 100}%`;
@@ -244,17 +226,16 @@ const player = {
 
     // 공격 범위 내 몬스터 타격 판정
     checkHit() {
-        const range = this.attackType === 'normal' ? 70 : 110;
+        const range = this.attackType === 'normal' ? 80 : 120;
         const damage = this.attackType === 'normal' ? 25 : 70;
         const knockback = this.attackType === 'normal' ? 8 : 25;
-        const arc = this.attackType === 'normal' ? Math.PI * 0.6 : Math.PI * 1.0; // 강타는 더 넓은 부채꼴
+        const arc = this.attackType === 'normal' ? Math.PI * 0.6 : Math.PI * 1.0;
 
         monsters.forEach(m => {
             const dist = Math.hypot(m.x - this.x, m.y - this.y);
             if (dist < range + m.radius) {
                 const angleToMonster = Math.atan2(m.y - this.y, m.x - this.x);
                 let diff = angleToMonster - this.direction;
-                // 각도 정규화 (-PI ~ PI)
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
 
@@ -265,7 +246,7 @@ const player = {
                     m.hitTimer = 10;
                     
                     if (this.attackType === 'heavy') {
-                        addSlashEffect(m.x, m.y); // 강타 타격 효과
+                        addSlashEffect(m.x, m.y);
                     }
                 }
             }
@@ -298,18 +279,40 @@ const player = {
         ctx.fillStyle = '#e67e22';
         ctx.fillRect(8, -8, 4, 16);  // 코등이
 
-        // 4. 스프라이트 공격 이펙트 렌더링
+        // =================================================================
+        // ★ 4x4 스프라이트 이펙트 화면 출력 처리
+        // =================================================================
         if (this.isAttacking) {
             const img = this.attackType === 'normal' ? normalSlashImg : heavySlashImg;
-            const frameWidth = this.attackType === 'normal' ? 120 : 180;
-            const frameHeight = frameWidth;
             
-            ctx.drawImage(
-                img,
-                this.animFrame * frameWidth, 0, frameWidth, frameHeight,
-                -frameWidth * 0.2, -frameHeight / 2, frameWidth, frameHeight
-            );
+            // 이미지가 로드된 상태에서만 렌더링
+            if (img.complete && img.naturalWidth > 0) {
+                // 1. 원본 이미지 1칸(1프레임)의 너비와 높이 계산 (4 나누기)
+                const frameWidth = img.width / 4;
+                const frameHeight = img.height / 4;
+                
+                // 2. 현재 애니메이션 프레임(0~15)을 바탕으로 행/열 인덱스 구하기
+                const col = this.animFrame % 4;          // 0, 1, 2, 3 열 무한반복
+                const row = Math.floor(this.animFrame / 4); // 0, 1, 2, 3 행
+                
+                // 3. 게임 화면에 보여질 이펙트 크기 (강타는 더 크게)
+                const renderWidth = this.attackType === 'normal' ? 140 : 200;
+                const renderHeight = renderWidth;
+                
+                ctx.drawImage(
+                    img,
+                    col * frameWidth,  // 원본 이미지 자르기 시작 X
+                    row * frameHeight, // 원본 이미지 자르기 시작 Y
+                    frameWidth,        // 잘라낼 너비
+                    frameHeight,       // 잘라낼 높이
+                    -renderWidth * 0.2, // 캐릭터 기준 X 출력 위치
+                    -renderHeight * 0.5,// 캐릭터 기준 Y 출력 위치 (중앙 정렬)
+                    renderWidth,       // 화면 출력 너비
+                    renderHeight       // 화면 출력 높이
+                );
+            }
         }
+        // =================================================================
 
         ctx.restore();
     }
