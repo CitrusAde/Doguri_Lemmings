@@ -105,7 +105,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // =================================================================
-// ★ 4x4 스프라이트 이미지 파일 로드 (index.html과 같은 폴더에 있어야 함)
+// ★ 4x4 스프라이트 이미지 파일 로드
 // =================================================================
 const normalSlashImg = new Image();
 normalSlashImg.src = '2d_Sword_fx_01.png'; // 일반 공격 (4x4)
@@ -114,7 +114,6 @@ const heavySlashImg = new Image();
 heavySlashImg.src = '2d_Sword_fx_02.png';  // 강타 공격 (4x4)
 // =================================================================
 
-// 게임 상태 변수
 let isGameOver = false;
 let kills = 0;
 let keys = {};
@@ -126,28 +125,24 @@ window.addEventListener('keyup', e => keys[e.code] = false);
 
 // --- [플레이어 객체] ---
 const player = {
-    x: 0, y: 0,
-    radius: 20,
+    x: 0, y: 0, // 바닥(발) 기준 좌표
+    radius: 18,
     speed: 4.5,
     hp: 100, maxHp: 100,
-    direction: 0, // 0: Right, PI/2: Down, PI: Left, -PI/2: Up
+    direction: 0, 
     
-    // 공격 상태
     isAttacking: false,
-    attackType: null, // 'normal' or 'heavy'
+    attackType: null, 
     animFrame: 0,
     animTimer: 0,
     
-    // 쿨타임
-    cdNormal: 0, maxCdNormal: 25,  // 약 0.4초
-    cdHeavy: 0,  maxCdHeavy: 180,  // 약 3초
+    cdNormal: 0, maxCdNormal: 25, 
+    cdHeavy: 0,  maxCdHeavy: 180, 
 
     update() {
-        // 쿨타임 감소
         if (this.cdNormal > 0) this.cdNormal--;
         if (this.cdHeavy > 0) this.cdHeavy--;
 
-        // 방향키 이동 (공격 중에는 이동 속도 감소)
         let dx = 0, dy = 0;
         if (keys['ArrowUp']) dy -= 1;
         if (keys['ArrowDown']) dy += 1;
@@ -157,37 +152,31 @@ const player = {
         if (dx !== 0 || dy !== 0) {
             if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
             const currentSpeed = this.isAttacking ? this.speed * 0.3 : this.speed;
-            this.x += dx * currentSpeed;
-            this.y += dy * currentSpeed;
             
-            // 이동 방향으로 캐릭터 시선 고정
+            this.x += dx * currentSpeed;
+            // ★ 쿼터뷰 원근감: Y축(위아래) 이동은 X축보다 살짝 느리게 이동하여 깊이감 부여
+            this.y += dy * currentSpeed * 0.8; 
+            
             if (!this.isAttacking) {
                 this.direction = Math.atan2(dy, dx);
             }
         }
 
-        // 공격 입력 처리 (A: 일반공격, S: 강타)
         if (keys['KeyA'] && !this.isAttacking && this.cdNormal <= 0) {
             this.startAttack('normal');
         } else if (keys['KeyS'] && !this.isAttacking && this.cdHeavy <= 0) {
             this.startAttack('heavy');
         }
 
-        // =================================================================
-        // ★ 4x4 스프라이트 (총 16프레임) 애니메이션 처리
-        // =================================================================
         if (this.isAttacking) {
             this.animTimer++;
-            const maxFrames = 16; // 4x4 격자이므로 16프레임
-            
-            // 일반 공격은 1프레임당 1틱, 강타는 좀 더 묵직하게 2틱 유지
+            const maxFrames = 16; 
             const frameSpeed = this.attackType === 'normal' ? 1 : 2; 
 
             if (this.animTimer >= frameSpeed) {
                 this.animTimer = 0;
                 this.animFrame++;
                 
-                // 16프레임 중 5번째 프레임에 데미지 및 넉백 적용
                 if (this.animFrame === 5) {
                     this.checkHit();
                 }
@@ -197,9 +186,7 @@ const player = {
                 }
             }
         }
-        // =================================================================
 
-        // UI 업데이트
         document.getElementById('hp-bar').style.width = `${(this.hp / this.maxHp) * 100}%`;
         document.getElementById('hp-text').innerText = Math.ceil(this.hp);
         document.getElementById('kill-text').innerText = kills;
@@ -220,16 +207,15 @@ const player = {
             this.cdNormal = this.maxCdNormal;
         } else {
             this.cdHeavy = this.maxCdHeavy;
-            screenShake = 15; // 강타 시 화면 흔들림
+            screenShake = 15; 
         }
     },
 
-    // 공격 범위 내 몬스터 타격 판정
     checkHit() {
-        const range = this.attackType === 'normal' ? 80 : 120;
+        const range = this.attackType === 'normal' ? 85 : 130;
         const damage = this.attackType === 'normal' ? 25 : 70;
-        const knockback = this.attackType === 'normal' ? 8 : 25;
-        const arc = this.attackType === 'normal' ? Math.PI * 0.6 : Math.PI * 1.0;
+        const knockback = this.attackType === 'normal' ? 10 : 28;
+        const arc = this.attackType === 'normal' ? Math.PI * 0.7 : Math.PI * 1.1;
 
         monsters.forEach(m => {
             const dist = Math.hypot(m.x - this.x, m.y - this.y);
@@ -255,60 +241,63 @@ const player = {
 
     draw() {
         ctx.save();
+        // 1. 바닥(발바닥) 위치로 좌표 이동
         ctx.translate(this.x - camera.x, this.y - camera.y);
 
-        // 1. 그림자 (쿼터뷰 입체감을 위한 타원)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        // ★ 2. 바닥 그림자 (발 밑에 고정)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         ctx.beginPath();
-        ctx.ellipse(0, 15, 18, 8, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 18, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 2. 캐릭터 몸통
+        // ★ 3. 캐릭터 입체화: 발보다 위쪽(Y축 -18px)으로 이동하여 몸통을 그림 (바닥에 서 있는 효과)
+        ctx.translate(0, -18);
+
+        // 몸통 (캡슐 형태의 느낌을 주기 위해 약간 길쭉하게)
         ctx.fillStyle = '#2ecc71';
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 16, 20, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#27ae60';
         ctx.stroke();
 
-        // 3. 무기 / 검 (방향에 따라 회전)
+        // 머리/투구 (몸통 위에 그려 입체감 부각)
+        ctx.fillStyle = '#1abc9c';
+        ctx.beginPath();
+        ctx.arc(0, -8, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4. 무기와 이펙트 방향 회전
         ctx.rotate(this.direction);
+
+        // 검 (캐릭터 오른쪽 손에서 앞으로 뻗음)
         ctx.fillStyle = '#bdc3c7';
-        ctx.fillRect(10, -4, 25, 8); // 칼날
+        ctx.fillRect(12, -4, 28, 7); 
         ctx.fillStyle = '#e67e22';
-        ctx.fillRect(8, -8, 4, 16);  // 코등이
+        ctx.fillRect(10, -8, 4, 16); 
 
         // =================================================================
-        // ★ 4x4 스프라이트 이펙트 화면 출력 처리
+        // ★ 4x4 스프라이트 이펙트: 캐릭터 "정면"에서 터지도록 위치 수정
         // =================================================================
         if (this.isAttacking) {
             const img = this.attackType === 'normal' ? normalSlashImg : heavySlashImg;
             
-            // 이미지가 로드된 상태에서만 렌더링
             if (img.complete && img.naturalWidth > 0) {
-                // 1. 원본 이미지 1칸(1프레임)의 너비와 높이 계산 (4 나누기)
                 const frameWidth = img.width / 4;
                 const frameHeight = img.height / 4;
+                const col = this.animFrame % 4;          
+                const row = Math.floor(this.animFrame / 4); 
                 
-                // 2. 현재 애니메이션 프레임(0~15)을 바탕으로 행/열 인덱스 구하기
-                const col = this.animFrame % 4;          // 0, 1, 2, 3 열 무한반복
-                const row = Math.floor(this.animFrame / 4); // 0, 1, 2, 3 행
-                
-                // 3. 게임 화면에 보여질 이펙트 크기 (강타는 더 크게)
-                const renderWidth = this.attackType === 'normal' ? 140 : 200;
+                const renderWidth = this.attackType === 'normal' ? 150 : 220;
                 const renderHeight = renderWidth;
                 
                 ctx.drawImage(
                     img,
-                    col * frameWidth,  // 원본 이미지 자르기 시작 X
-                    row * frameHeight, // 원본 이미지 자르기 시작 Y
-                    frameWidth,        // 잘라낼 너비
-                    frameHeight,       // 잘라낼 높이
-                    -renderWidth * 0.2, // 캐릭터 기준 X 출력 위치
-                    -renderHeight * 0.5,// 캐릭터 기준 Y 출력 위치 (중앙 정렬)
-                    renderWidth,       // 화면 출력 너비
-                    renderHeight       // 화면 출력 높이
+                    col * frameWidth, row * frameHeight, frameWidth, frameHeight,
+                    // ★ X 위치를 15px 앞으로 당겨서 몸통 중심이 아닌 '칼 앞부분(정면)'에서 생성되게 수정!
+                    15, -renderHeight * 0.5, 
+                    renderWidth, renderHeight
                 );
             }
         }
@@ -323,30 +312,26 @@ class Monster {
     constructor(x, y) {
         this.x = x; this.y = y;
         this.radius = 16;
-        this.speed = Math.random() * 1.0 + 1.2;
+        this.speed = Math.random() * 0.8 + 1.0;
         this.hp = 50; this.maxHp = 50;
-        this.vx = 0; this.vy = 0; // 넉백 속도
+        this.vx = 0; this.vy = 0; 
         this.hitTimer = 0;
     }
 
     update(index) {
-        // 넉백 물리 적용
         this.x += this.vx; this.y += this.vy;
         this.vx *= 0.85; this.vy *= 0.85;
         if (this.hitTimer > 0) this.hitTimer--;
 
-        // 플레이어 추격
         const dist = Math.hypot(player.x - this.x, player.y - this.y);
         if (dist > this.radius + player.radius && this.hitTimer === 0) {
             const angle = Math.atan2(player.y - this.y, player.x - this.x);
             this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
+            this.y += Math.sin(angle) * (this.speed * 0.8); // 몬스터도 Y축 이동속도 보정
         } else if (dist <= this.radius + player.radius) {
-            // 플레이어 공격
             player.hp = Math.max(0, player.hp - 0.5);
         }
 
-        // 사망 처리
         if (this.hp <= 0) {
             monsters.splice(index, 1);
             kills++;
@@ -355,33 +340,42 @@ class Monster {
 
     draw() {
         ctx.save();
+        // 1. 발바닥 위치
         ctx.translate(this.x - camera.x, this.y - camera.y);
 
-        // 그림자
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        // ★ 바닥 그림자
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.beginPath();
-        ctx.ellipse(0, 12, 15, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 16, 7, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 몬스터 몸통 (피격 시 하얗게 깜빡임)
+        // ★ 2. 몬스터도 위로 띄워서 입체적으로 표현
+        ctx.translate(0, -14);
+
+        // 몸통
+        ctx.fillStyle = this.hitTimer > 0 ? '#ffffff' : '#c0392b';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 15, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 머리
         ctx.fillStyle = this.hitTimer > 0 ? '#ffffff' : '#e74c3c';
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, -8, 10, 0, Math.PI * 2);
         ctx.fill();
 
-        // 체력바
+        // 머리 위 체력바
         if (this.hp < this.maxHp) {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(-15, -28, 30, 4);
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(-15, -28, 30, 5);
             ctx.fillStyle = '#2ecc71';
-            ctx.fillRect(-15, -28, 30 * (this.hp / this.maxHp), 4);
+            ctx.fillRect(-15, -28, 30 * (this.hp / this.maxHp), 5);
         }
 
         ctx.restore();
     }
 }
 
-// 추가 타격 이펙트 (강타 적중 시)
 let hitEffects = [];
 function addSlashEffect(x, y) {
     hitEffects.push({ x, y, radius: 1, alpha: 1.0 });
@@ -389,7 +383,7 @@ function addSlashEffect(x, y) {
 
 let monsters = [];
 function spawnMonster() {
-    if (monsters.length < 30 && !isGameOver) {
+    if (monsters.length < 35 && !isGameOver) {
         const angle = Math.random() * Math.PI * 2;
         const dist = Math.random() * 300 + 500;
         monsters.push(new Monster(player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist));
@@ -397,19 +391,26 @@ function spawnMonster() {
 }
 setInterval(spawnMonster, 800);
 
-// 쿼터뷰 격자 바닥 렌더링
+// =================================================================
+// ★ 쿼터뷰(Isometric) 특유의 다이아몬드(마름모) 바닥 격자 렌더링
+// =================================================================
 function drawIsometricGrid() {
-    const size = 60;
-    const offsetX = -camera.x % size;
+    const size = 80;
+    const offsetX = -camera.x % (size * 2);
     const offsetY = -camera.y % size;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.lineWidth = 1;
 
-    for (let x = offsetX - size; x < canvas.width + size; x += size) {
-        for (let y = offsetY - size; y < canvas.height + size; y += size) {
-            ctx.strokeRect(x, y, size, size);
-        }
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+
+    // 대각선 격자를 그려서 쿼터뷰 시점(45도 틀어진 바닥) 연출
+    for (let x = offsetX - size * 5; x < canvas.width + size * 5; x += size) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x - canvas.height * 2, canvas.height);
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + canvas.height * 2, canvas.height);
     }
+    ctx.stroke();
 }
 
 function updateSkillUI(type, currentCd, maxCd) {
@@ -442,11 +443,9 @@ function restartGame() {
 function animate() {
     requestAnimationFrame(animate);
 
-    // 카메라 추적
     camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
 
-    // 화면 흔들림 효과
     let shakeX = 0, shakeY = 0;
     if (screenShake > 0) {
         shakeX = (Math.random() - 0.5) * screenShake;
@@ -458,18 +457,17 @@ function animate() {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    // 배경 지우기
-    ctx.fillStyle = '#1e1e24';
+    ctx.fillStyle = '#18181c';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawIsometricGrid();
+    
+    drawIsometricGrid(); // 마름모 격자 그리기
 
     if (!isGameOver) player.update();
 
-    // ★ 쿼터뷰 깊이 정렬 (Depth Sorting): Y좌표가 작은(위에 있는) 객체를 먼저 그림
+    // ★ 쿼터뷰 핵심: Y좌표(바닥 발 위치)가 위에 있는 객체부터 그리기 (깊이 정렬)
     let renderList = [player, ...monsters];
     renderList.sort((a, b) => a.y - b.y);
 
-    // 정렬된 순서대로 렌더링
     renderList.forEach(entity => {
         if (entity === player) {
             if (!isGameOver) player.draw();
@@ -479,12 +477,11 @@ function animate() {
         }
     });
 
-    // 타격 이펙트 렌더링
     hitEffects.forEach((fx, index) => {
         ctx.save();
         ctx.translate(fx.x - camera.x, fx.y - camera.y);
         ctx.beginPath();
-        ctx.arc(0, 0, fx.radius, 0, Math.PI * 2);
+        ctx.arc(0, -15, fx.radius, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(231, 76, 60, ${fx.alpha})`;
         ctx.lineWidth = 3;
         ctx.stroke();
