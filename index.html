@@ -278,7 +278,7 @@ const player = {
         ctx.fillRect(10, -8, 4, 16); 
 
         // =================================================================
-        // ★ 4x4 스프라이트 이펙트: 캐릭터 "정면"에서 터지도록 위치 수정
+        // ★ 4x4 스프라이트 이펙트: 몸 중심에서 터지도록 수정
         // =================================================================
         if (this.isAttacking) {
             const img = this.attackType === 'normal' ? normalSlashImg : heavySlashImg;
@@ -295,8 +295,9 @@ const player = {
                 ctx.drawImage(
                     img,
                     col * frameWidth, row * frameHeight, frameWidth, frameHeight,
-                    // ★ X 위치를 15px 앞으로 당겨서 몸통 중심이 아닌 '칼 앞부분(정면)'에서 생성되게 수정!
-                    -30, -renderHeight * 0.5, 
+                    // ❌ [기존] 15, -renderHeight * 0.5,  <-- 15px 앞쪽에서 출력됨
+                    // ⭕ [수정] -renderWidth * 0.5, -renderHeight * 0.5 <-- 정중앙(몸 중심)에서 출력됨
+                    -renderWidth * 0.5, -renderHeight * 0.5, 
                     renderWidth, renderHeight
                 );
             }
