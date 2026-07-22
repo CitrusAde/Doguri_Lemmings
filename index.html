@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quarter-View Action RPG</title>
+    <title>Quarter-View Action RPG (Fixed Camera)</title>
     <style>
         * { box-sizing: border-box; user-select: none; }
         body {
@@ -31,7 +31,6 @@
         .bar { height: 100%; transition: width 0.1s linear; }
         #hp-bar { background: linear-gradient(90deg, #c0392b, #e74c3c); width: 100%; }
         
-        /* 스킬 쿨타임 UI */
         #skill-bar {
             position: absolute; bottom: 30px; left: 50%;
             transform: translateX(-50%); display: flex; gap: 15px;
@@ -105,20 +104,19 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // =================================================================
-// ★ 1. 이미지 로딩 (공격 이펙트 + 512x512 바닥 맵 타일)
+// 1. 이미지 로딩
 // =================================================================
 const normalSlashImg = new Image();
-normalSlashImg.src = '2d_Sword_fx_01.png'; // 일반 공격 (4x4)
+normalSlashImg.src = '2d_Sword_fx_01.png'; 
 
 const heavySlashImg = new Image();
-heavySlashImg.src = '2d_Sword_fx_02.png';  // 강타 공격 (4x4)
+heavySlashImg.src = '2d_Sword_fx_02.png';  
 
 const bgImage = new Image();
-bgImage.src = '2d_map_tile_01.png';        // ★ 추가하신 512x512 바닥 이미지
+bgImage.src = '2d_map_tile_01.png';        
 let bgPattern = null;
 
 bgImage.onload = () => {
-    // 이미지가 로드되면 캔버스의 무한 반복(repeat) 패턴으로 등록합니다.
     bgPattern = ctx.createPattern(bgImage, 'repeat');
 };
 // =================================================================
@@ -134,9 +132,9 @@ window.addEventListener('keyup', e => keys[e.code] = false);
 
 // --- [플레이어 객체] ---
 const player = {
-    x: 0, y: 0, // 바닥(발) 기준 좌표
+    x: 0, y: 0, 
     radius: 18,
-    speed: 4.5,
+    speed: 5.0,
     hp: 100, maxHp: 100,
     direction: 0, 
     
@@ -159,12 +157,13 @@ const player = {
         if (keys['ArrowRight']) dx += 1;
 
         if (dx !== 0 || dy !== 0) {
+            // 대각선 이동 시 루트2 보정
             if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
             const currentSpeed = this.isAttacking ? this.speed * 0.3 : this.speed;
             
             this.x += dx * currentSpeed;
-            // 쿼터뷰 원근감 보정: Y축 이동을 조금 더 무겁게 줘서 깊이감 표현
-            this.y += dy * currentSpeed * 0.8; 
+            // ★ 멀미 해결 1: 쿼터뷰 바닥은 세로가 0.5배 압축되어 있으므로, Y축 이동속도도 딱 절반(0.5)이어야 바닥 위를 걷는 것처럼 보입니다!
+            this.y += dy * currentSpeed * 0.5; 
             
             if (!this.isAttacking) {
                 this.direction = Math.atan2(dy, dx);
@@ -185,14 +184,8 @@ const player = {
             if (this.animTimer >= frameSpeed) {
                 this.animTimer = 0;
                 this.animFrame++;
-                
-                if (this.animFrame === 5) {
-                    this.checkHit();
-                }
-
-                if (this.animFrame >= maxFrames) {
-                    this.isAttacking = false;
-                }
+                if (this.animFrame === 5) this.checkHit();
+                if (this.animFrame >= maxFrames) this.isAttacking = false;
             }
         }
 
@@ -237,12 +230,9 @@ const player = {
                 if (Math.abs(diff) <= arc / 2) {
                     m.hp -= damage;
                     m.vx = Math.cos(angleToMonster) * knockback;
-                    m.vy = Math.sin(angleToMonster) * knockback;
+                    m.vy = Math.sin(angleToMonster) * (knockback * 0.5); // 넉백도 쿼터뷰 비율 적용
                     m.hitTimer = 10;
-                    
-                    if (this.attackType === 'heavy') {
-                        addSlashEffect(m.x, m.y);
-                    }
+                    if (this.attackType === 'heavy') addSlashEffect(m.x, m.y);
                 }
             }
         });
@@ -252,39 +242,41 @@ const player = {
         ctx.save();
         ctx.translate(this.x - camera.x, this.y - camera.y);
 
-        // 바닥 그림자
+        // 1. 발바닥 그림자
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         ctx.beginPath();
-        ctx.ellipse(0, 0, 18, 8, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 16, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 입체화: 몸통을 바닥보다 위쪽에 그림
-        ctx.translate(0, -18);
+        // 2. 캐릭터 몸통을 약간 위로 띄움
+        ctx.translate(0, -20);
 
+        // 몸통
         ctx.fillStyle = '#2ecc71';
         ctx.beginPath();
-        ctx.ellipse(0, 0, 16, 20, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 14, 18, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#27ae60';
         ctx.stroke();
 
+        // 머리
         ctx.fillStyle = '#1abc9c';
         ctx.beginPath();
-        ctx.arc(0, -8, 10, 0, Math.PI * 2);
+        ctx.arc(0, -10, 10, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.rotate(this.direction);
 
+        // 무기
         ctx.fillStyle = '#bdc3c7';
-        ctx.fillRect(12, -4, 28, 7); 
+        ctx.fillRect(10, -3, 26, 6); 
         ctx.fillStyle = '#e67e22';
-        ctx.fillRect(10, -8, 4, 16); 
+        ctx.fillRect(8, -7, 4, 14); 
 
-        // 공격 이펙트 렌더링
+        // 이펙트 (몸 중심에서 출력)
         if (this.isAttacking) {
             const img = this.attackType === 'normal' ? normalSlashImg : heavySlashImg;
-            
             if (img.complete && img.naturalWidth > 0) {
                 const frameWidth = img.width / 4;
                 const frameHeight = img.height / 4;
@@ -297,12 +289,11 @@ const player = {
                 ctx.drawImage(
                     img,
                     col * frameWidth, row * frameHeight, frameWidth, frameHeight,
-                    15, -renderHeight * 0.5, 
+                    -renderWidth * 0.5, -renderHeight * 0.5, 
                     renderWidth, renderHeight
                 );
             }
         }
-
         ctx.restore();
     }
 };
@@ -327,7 +318,8 @@ class Monster {
         if (dist > this.radius + player.radius && this.hitTimer === 0) {
             const angle = Math.atan2(player.y - this.y, player.x - this.x);
             this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * (this.speed * 0.8);
+            // 몬스터 추격 속도도 쿼터뷰 Y축 비율(0.5)에 맞춰 이동
+            this.y += Math.sin(angle) * (this.speed * 0.5); 
         } else if (dist <= this.radius + player.radius) {
             player.hp = Math.max(0, player.hp - 0.5);
         }
@@ -344,28 +336,27 @@ class Monster {
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.beginPath();
-        ctx.ellipse(0, 0, 16, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 14, 7, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.translate(0, -14);
+        ctx.translate(0, -16);
 
         ctx.fillStyle = this.hitTimer > 0 ? '#ffffff' : '#c0392b';
         ctx.beginPath();
-        ctx.ellipse(0, 0, 15, 18, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 13, 16, 0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = this.hitTimer > 0 ? '#ffffff' : '#e74c3c';
         ctx.beginPath();
-        ctx.arc(0, -8, 10, 0, Math.PI * 2);
+        ctx.arc(0, -8, 9, 0, Math.PI * 2);
         ctx.fill();
 
         if (this.hp < this.maxHp) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            ctx.fillRect(-15, -28, 30, 5);
+            ctx.fillRect(-15, -25, 30, 5);
             ctx.fillStyle = '#2ecc71';
-            ctx.fillRect(-15, -28, 30 * (this.hp / this.maxHp), 5);
+            ctx.fillRect(-15, -25, 30 * (this.hp / this.maxHp), 5);
         }
-
         ctx.restore();
     }
 }
@@ -380,53 +371,44 @@ function spawnMonster() {
     if (monsters.length < 35 && !isGameOver) {
         const angle = Math.random() * Math.PI * 2;
         const dist = Math.random() * 300 + 500;
-        monsters.push(new Monster(player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist));
+        // 몬스터 스폰 위치도 비율에 맞게
+        monsters.push(new Monster(player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * (dist * 0.5)));
     }
 }
 setInterval(spawnMonster, 800);
 
 // =================================================================
-// ★ 2. 평범한 2D 맵 이미지를 쿼터뷰 입체 바닥으로 렌더링하는 함수
+// ★ 멀미 치료 2: 카메라 스크롤과 바닥 회전을 완벽히 동기화하는 배경 함수
 // =================================================================
 function drawIsometricBackground() {
-    // 배경색을 어둡게 깔아줌 (로딩 전이나 모서리 여백 대비)
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 바닥 패턴 로딩이 안 됐거나 실패한 경우 기존 선 격자 그리기(안전장치)
-    if (!bgPattern) {
-        const size = 80;
-        const offsetX = -camera.x % (size * 2);
-        const offsetY = -camera.y % size;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let x = offsetX - size * 5; x < canvas.width + size * 5; x += size) {
-            ctx.moveTo(x, 0); ctx.lineTo(x - canvas.height * 2, canvas.height);
-            ctx.moveTo(x, 0); ctx.lineTo(x + canvas.height * 2, canvas.height);
-        }
-        ctx.stroke();
-        return;
-    }
+    if (!bgPattern) return;
 
     ctx.save();
-    
-    // 1. 화면의 정중앙을 원점(0,0)으로 맞춤
+    // 1. 화면 중앙을 원점으로
     ctx.translate(canvas.width / 2, canvas.height / 2);
     
-    // ★ 2. 쿼터뷰(Isometric) 각도 변환! (세로를 0.5배 누르고 45도 회전)
+    // 2. 바닥을 쿼터뷰로 변환 (세로 0.5배 압축, 45도 회전)
     ctx.scale(1, 0.5);       
     ctx.rotate(Math.PI / 4); 
     
-    // 3. 카메라 좌표에 맞춰 바닥 패턴을 반대로 스크롤시킴 (이동 효과)
-    ctx.translate(-camera.x, -camera.y);
+    // ★ 핵심: 카메라 좌표(x, y)도 역으로 회전시켜서 패턴에 적용해야 시각적 오차가 없습니다!
+    const cos = Math.cos(-Math.PI / 4);
+    const sin = Math.sin(-Math.PI / 4);
+    // 카메라 좌표를 쿼터뷰 공간으로 변환
+    const isoCamX = (camera.x * cos - (camera.y * 2) * sin);
+    const isoCamY = (camera.x * sin + (camera.y * 2) * cos);
 
-    // 4. 화면 회전 및 축소로 인해 빈 공간이 보이지 않도록, 화면보다 훨씬 넓은 영역에 패턴을 칠함
+    ctx.translate(-isoCamX, -isoCamY);
+
+    // 3. 화면을 넉넉히 덮도록 패턴 채우기
     ctx.fillStyle = bgPattern;
-    const drawSize = Math.max(canvas.width, canvas.height) * 4;
+    const drawSize = Math.max(canvas.width, canvas.height) * 3;
     ctx.fillRect(
-        camera.x - drawSize, 
-        camera.y - drawSize, 
+        isoCamX - drawSize, 
+        isoCamY - drawSize, 
         drawSize * 2, 
         drawSize * 2
     );
@@ -442,7 +424,7 @@ function updateSkillUI(type, currentCd, maxCd) {
     overlay.style.height = `${pct}%`;
     
     if (currentCd <= 0) slot.classList.add('ready');
-    else slot.classList.remove('ready'); // classList 수정
+    else slot.classList.remove('ready'); 
 }
 
 function triggerGameOver() {
@@ -465,8 +447,9 @@ function restartGame() {
 function animate() {
     requestAnimationFrame(animate);
 
-    camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
-    camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
+    // 카메라 추적
+    camera.x += (player.x - camera.x) * 0.1;
+    camera.y += (player.y - camera.y) * 0.1;
 
     let shakeX = 0, shakeY = 0;
     if (screenShake > 0) {
@@ -479,14 +462,18 @@ function animate() {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    // ★ 3. 기존 drawIsometricGrid() 대신 새 배경 렌더링 함수 호출!
+    // 바닥 렌더링
     drawIsometricBackground();
 
     if (!isGameOver) player.update();
 
-    // 쿼터뷰 핵심: Y좌표(바닥 발 위치)가 위에 있는 객체부터 그리기 (깊이 정렬)
+    // 쿼터뷰 정렬 (Y좌표 기준)
     let renderList = [player, ...monsters];
     renderList.sort((a, b) => a.y - b.y);
+
+    // 카메라 오프셋을 화면 중앙으로 보정하여 렌더링
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
 
     renderList.forEach(entity => {
         if (entity === player) {
@@ -512,6 +499,7 @@ function animate() {
         if (fx.alpha <= 0) hitEffects.splice(index, 1);
     });
 
+    ctx.restore();
     ctx.restore();
 }
 
