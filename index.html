@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quarter-View Action RPG (Fixed Camera + D Skill)</title>
+    <title>Quarter-View Action RPG (1:1 Clean Ratio Rollback)</title>
     <style>
         * { box-sizing: border-box; user-select: none; }
         body {
@@ -73,7 +73,6 @@
         </div>
     </div>
 
-    <!-- ★ D 스킬 UI 추가 -->
     <div id="skill-bar">
         <div class="skill-slot ready" id="slot-a">
             <div class="skill-name">일반공격</div>
@@ -110,16 +109,16 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // =================================================================
-// 1. 이미지 로딩 (★ 2d_Sword_fx_03.png 추가)
+// 1. 이미지 로딩 (A, S, D 스킬 + 배경 바닥 타일)
 // =================================================================
 const normalSlashImg = new Image();
-normalSlashImg.src = '2d_Sword_fx_01.png'; // A 스킬 (일반 4x4)
+normalSlashImg.src = '2d_Sword_fx_01.png'; // A 스킬
 
 const heavySlashImg = new Image();
-heavySlashImg.src = '2d_Sword_fx_02.png';  // S 스킬 (강타 4x4)
+heavySlashImg.src = '2d_Sword_fx_02.png';  // S 스킬
 
 const specialSlashImg = new Image();
-specialSlashImg.src = '2d_Sword_fx_03.png';// ★ D 스킬 (특수격 4x4)
+specialSlashImg.src = '2d_Sword_fx_03.png';// D 스킬
 
 const bgImage = new Image();
 bgImage.src = '2d_map_tile_01.png';        
@@ -148,19 +147,18 @@ const player = {
     direction: 0, 
     
     isAttacking: false,
-    attackType: null, // 'normal', 'heavy', 'special'
+    attackType: null, 
     animFrame: 0,
     animTimer: 0,
     
-    // ★ 쿨타임 관리
-    cdNormal: 0,  maxCdNormal: 25,   // 약 0.4초
-    cdHeavy: 0,   maxCdHeavy: 180,   // 약 3초
-    cdSpecial: 0, maxCdSpecial: 90,  // ★ 약 1.5초
+    cdNormal: 0,  maxCdNormal: 25,   
+    cdHeavy: 0,   maxCdHeavy: 180,   
+    cdSpecial: 0, maxCdSpecial: 90,  
 
     update() {
         if (this.cdNormal > 0) this.cdNormal--;
         if (this.cdHeavy > 0) this.cdHeavy--;
-        if (this.cdSpecial > 0) this.cdSpecial--; // ★ D 스킬 쿨타임 감소
+        if (this.cdSpecial > 0) this.cdSpecial--; 
 
         let dx = 0, dy = 0;
         if (keys['ArrowUp']) dy -= 1;
@@ -173,26 +171,24 @@ const player = {
             const currentSpeed = this.isAttacking ? this.speed * 0.3 : this.speed;
             
             this.x += dx * currentSpeed;
-            this.y += dy * currentSpeed * 0.5; 
+            this.y += dy * currentSpeed * 0.5; // 쿼터뷰 Y축 속도 보정
             
             if (!this.isAttacking) {
                 this.direction = Math.atan2(dy, dx);
             }
         }
 
-        // ★ 공격 입력 처리 (A: 일반, S: 강타, D: 특수격)
         if (keys['KeyA'] && !this.isAttacking && this.cdNormal <= 0) {
             this.startAttack('normal');
         } else if (keys['KeyS'] && !this.isAttacking && this.cdHeavy <= 0) {
             this.startAttack('heavy');
         } else if (keys['KeyD'] && !this.isAttacking && this.cdSpecial <= 0) {
-            this.startAttack('special'); // ★ D키 입력
+            this.startAttack('special'); 
         }
 
         if (this.isAttacking) {
             this.animTimer++;
             const maxFrames = 16; 
-            // ★ D 스킬(special)은 화려하게 살짝 빠른 1틱 속도로 재생
             const frameSpeed = this.attackType === 'heavy' ? 2 : 1; 
 
             if (this.animTimer >= frameSpeed) {
@@ -209,7 +205,7 @@ const player = {
 
         updateSkillUI('a', this.cdNormal, this.maxCdNormal);
         updateSkillUI('s', this.cdHeavy, this.maxCdHeavy);
-        updateSkillUI('d', this.cdSpecial, this.maxCdSpecial); // ★ D 스킬 UI 업데이트
+        updateSkillUI('d', this.cdSpecial, this.maxCdSpecial); 
 
         if (this.hp <= 0 && !isGameOver) triggerGameOver();
     },
@@ -226,22 +222,19 @@ const player = {
             this.cdHeavy = this.maxCdHeavy;
             screenShake = 15; 
         } else if (type === 'special') {
-            // ★ D 스킬 효과
             this.cdSpecial = this.maxCdSpecial;
-            screenShake = 8; // 중간 정도의 흔들림
+            screenShake = 8; 
         }
     },
 
     checkHit() {
         let range, damage, knockback, arc;
         
-        // ★ 각 스킬별 타격 범위, 데미지, 넉백, 공격 각도(부채꼴) 설정
         if (this.attackType === 'normal') {
             range = 85; damage = 25; knockback = 10; arc = Math.PI * 0.7;
         } else if (this.attackType === 'heavy') {
             range = 130; damage = 70; knockback = 28; arc = Math.PI * 1.1;
         } else if (this.attackType === 'special') {
-            // ★ D 스킬: 사거리가 넓고 빠른 연격 느낌의 특수 공격
             range = 110; damage = 45; knockback = 18; arc = Math.PI * 0.9;
         }
 
@@ -271,11 +264,13 @@ const player = {
         ctx.save();
         ctx.translate(this.x - camera.x, this.y - camera.y);
 
+        // 발바닥 그림자
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         ctx.beginPath();
         ctx.ellipse(0, 0, 16, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
+        // 입체화 (몸통 띄우기)
         ctx.translate(0, -20);
 
         ctx.fillStyle = '#2ecc71';
@@ -298,12 +293,13 @@ const player = {
         ctx.fillStyle = '#e67e22';
         ctx.fillRect(8, -7, 4, 14); 
 
-        // ★ 이펙트 출력 부분
+        // =================================================================
+        // ★ [롤백 완료] 억지로 늘리는 비율 왜곡 제거! 원본 1:1 깨끗한 화질 유지
+        // =================================================================
         if (this.isAttacking) {
             let img;
             let renderWidth = 150;
 
-            // ★ 스킬별로 이미지 및 크기 설정
             if (this.attackType === 'normal') {
                 img = normalSlashImg;
                 renderWidth = 150;
@@ -311,8 +307,8 @@ const player = {
                 img = heavySlashImg;
                 renderWidth = 220;
             } else if (this.attackType === 'special') {
-                img = specialSlashImg; // ★ D 스킬 이미지 연결
-                renderWidth = 190;     // 중간 정도의 적절한 스케일
+                img = specialSlashImg; 
+                renderWidth = 190;     
             }
 
             if (img && img.complete && img.naturalWidth > 0) {
@@ -321,17 +317,7 @@ const player = {
                 const col = this.animFrame % 4;          
                 const row = Math.floor(this.animFrame / 4); 
                 
-                const renderHeight = renderWidth;
-                
-                // ★ [추가된 부분 1] 이미지를 그리기 전에 각도를 계산해서 세로 비율을 강제로 늘려줌!
-                ctx.save(); 
-                const verticalFactor = Math.abs(Math.sin(this.direction)); 
-                
-                // 👉 이 '0.6' 수치를 조절하시면 됩니다! (0.5 ~ 0.8 추천)
-                const stretchIntensity = 0.6; 
-                const scaleY = 1.0 + (verticalFactor * stretchIntensity);
-                ctx.scale(1.0, scaleY); 
-                // -----------------------------------------------------------
+                const renderHeight = renderWidth; // 1:1 정사각형 비율 유지
 
                 ctx.drawImage(
                     img,
@@ -339,11 +325,10 @@ const player = {
                     -renderWidth * 0.5, -renderHeight * 0.5, 
                     renderWidth, renderHeight
                 );
-
-                // ★ [추가된 부분 2] 늘려준 비율을 다시 원래대로 되돌림
-                ctx.restore(); 
             }
         }
+        // =================================================================
+
         ctx.restore();
     }
 };
