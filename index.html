@@ -1,402 +1,549 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>프로젝트 좀보이드 - 2D 생존 프로토타입</title>
-  <style>
-    body { background: #111; color: #ddd; font-family: 'Malgun Gothic', sans-serif; text-align: center; margin: 0; padding: 10px; user-select: none; }
-    #game-wrapper { display: inline-block; position: relative; border: 4px solid #333; box-shadow: 0 0 30px rgba(0,0,0,0.9); }
-    canvas { display: block; background: #222; cursor: crosshair; }
-    #ui-layer { position: absolute; top: 15px; right: 15px; width: 180px; pointer-events: none; text-align: right; }
-    .moodle { display: none; background: rgba(0,0,0,0.8); border: 2px solid #555; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; font-weight: bold; font-size: 14px; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); animation: pulse 1.5s infinite alternate; }
-    @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.03); } }
-    .moodle.panic { border-color: #ff4757; color: #ff4757; }
-    .moodle.tired { border-color: #ffa502; color: #ffa502; }
-    .moodle.bleed { border-color: #ff6b81; color: #ff6b81; }
-    #stats { position: absolute; top: 15px; left: 15px; text-align: left; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; border: 1px solid #444; pointer-events: none; }
-    .bar-wrap { width: 150px; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-top: 4px; border: 1px solid #000; }
-    .bar { height: 100%; transition: width 0.1s; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Zomboid Prototype</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        .stat-box {
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            border-radius: 5px;
+            border-left: 4px solid #fff;
+        }
+        .bar-container {
+            width: 200px;
+            height: 16px;
+            background-color: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .bar {
+            height: 100%;
+            transition: width 0.1s linear;
+        }
+        #hp-bar { background-color: #e74c3c; width: 100%; }
+        #stm-bar { background-color: #2ecc71; width: 100%; }
+        #ammo-text { font-size: 1.2rem; font-weight: bold; color: #f1c40f; }
+        #kill-text { font-size: 1.1rem; color: #ecf0f1; margin-top: 5px; }
+        
+        #game-over {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+        #game-over h1 { font-size: 4rem; color: #e74c3c; margin: 0 0 20px 0; }
+        #game-over button {
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            background: #c0392b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #game-over button:hover { background: #e74c3c; }
+    </style>
 </head>
 <body>
 
-  <div id="game-wrapper">
-    <canvas id="canvas" width="800" height="600"></canvas>
-    
-    <!-- 좌측 상단: 생존 스탯 -->
-    <div id="stats">
-      <div style="font-size: 13px; font-weight: bold;">❤️ 체력 (HP)</div>
-      <div class="bar-wrap"><div id="hp-bar" class="bar" style="width: 100%; background: #ff4757;"></div></div>
-      <div style="font-size: 13px; font-weight: bold; margin-top: 8px;">⚡ 스태미나</div>
-      <div class="bar-wrap"><div id="stm-bar" class="bar" style="width: 100%; background: #2ed573;"></div></div>
-    </div>
+    <canvas id="gameCanvas"></canvas>
 
-    <!-- 우측 상단: 모들(Moodles) 상태 이상 UI -->
     <div id="ui-layer">
-      <div id="moodle-panic" class="moodle panic">😱 극심한 패닉<br><span style="font-size:11px; font-weight:normal; color:#aaa;">시야각 대폭 감소</span></div>
-      <div id="moodle-tired" class="moodle tired">🥵 지침 (숨 헐떡임)<br><span style="font-size:11px; font-weight:normal; color:#aaa;">이동/공격 속도 저하</span></div>
-      <div id="moodle-bleed" class="moodle bleed">🩸 출혈 중<br><span style="font-size:11px; font-weight:normal; color:#aaa;">체력 지속 감소</span></div>
+        <div class="stat-box" style="border-color: #e74c3c;">
+            <div>HEALTH</div>
+            <div class="bar-container"><div id="hp-bar" class="bar"></div></div>
+        </div>
+        <div class="stat-box" style="border-color: #2ecc71;">
+            <div>STAMINA</div>
+            <div class="bar-container"><div id="stm-bar" class="bar"></div></div>
+        </div>
+        <div class="stat-box" style="border-color: #f1c40f;">
+            <div>AMMO: <span id="ammo-text">15</span> / ∞</div>
+            <div id="kill-text">KILLS: 0</div>
+        </div>
     </div>
-  </div>
-  
-  <p style="color: #888; font-size: 14px;">
-    🎮 <b>조작법:</b> [W, A, S, D] 이동 | [Shift + 이동] 달리기 (소음 발생!) | [마우스 이동] 조준 | [좌클릭] 야구 빠따 휘두르기<br>
-    💡 <b>핵심:</b> 좀비는 시야 뒤(어둠 속)에서 갑자기 나타납니다. 뛰거나 무기를 휘두르면 소음을 듣고 벽 뒤에서도 몰려듭니다!
-  </p>
 
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    <div id="game-over">
+        <h1>YOU DIED</h1>
+        <p id="final-stats" style="font-size: 1.5rem; margin-bottom: 30px;"></p>
+        <button onclick="restartGame()">다시 생존하기</button>
+    </div>
 
-    // 어둠(그림자) 렌더링을 위한 오프스크린 캔버스
-    const shadowCanvas = document.createElement('canvas');
-    shadowCanvas.width = canvas.width;
-    shadowCanvas.height = canvas.height;
-    const sCtx = shadowCanvas.getContext('2d');
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-    // 게임 상태
-    const keys = {};
-    const mouse = { x: 400, y: 300 };
-    let bloodStains = [];
+// UI 엘리먼트
+const hpBar = document.getElementById('hp-bar');
+const stmBar = document.getElementById('stm-bar');
+const ammoText = document.getElementById('ammo-text');
+const killText = document.getElementById('kill-text');
+const gameOverScreen = document.getElementById('game-over');
+const finalStats = document.getElementById('final-stats');
 
-    window.addEventListener('keydown', e => keys[e.code.toLowerCase()] = true);
-    window.addEventListener('keyup', e => keys[e.code.toLowerCase()] = false);
-    canvas.addEventListener('mousemove', e => {
-      const rect = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
+// 캔버스 크기 조정
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// 게임 상태 변수
+let isGameOver = false;
+let kills = 0;
+let keys = {};
+let mouse = { x: 0, y: 0 };
+let camera = { x: 0, y: 0 };
+
+// 키보드 & 마우스 이벤트
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+window.addEventListener('mousemove', e => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+});
+window.addEventListener('mousedown', e => {
+    if (e.button === 0 && !isGameOver) player.shoot();
+});
+
+// 플레이어 객체
+const player = {
+    x: 0,
+    y: 0,
+    radius: 18,
+    angle: 0,
+    speed: 3,
+    runSpeed: 5.5,
+    maxHp: 100,
+    hp: 100,
+    maxStamina: 100,
+    stamina: 100,
+    ammo: 15,
+    
+    update() {
+        // 달리기 및 스태미나 관리
+        let currentSpeed = this.speed;
+        if ((keys['ShiftLeft'] || keys['ShiftRight']) && this.stamina > 0 && (keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD'])) {
+            currentSpeed = this.runSpeed;
+            this.stamina = Math.max(0, this.stamina - 0.6);
+        } else {
+            this.stamina = Math.min(this.maxStamina, this.stamina + 0.3);
+        }
+
+        // 이동 (WASD)
+        let dx = 0;
+        let dy = 0;
+        if (keys['KeyW']) dy -= 1;
+        if (keys['KeyS']) dy += 1;
+        if (keys['KeyA']) dx -= 1;
+        if (keys['KeyD']) dx += 1;
+
+        // 대각선 이동 속도 보정
+        if (dx !== 0 && dy !== 0) {
+            dx *= 0.7071;
+            dy *= 0.7071;
+        }
+
+        this.x += dx * currentSpeed;
+        this.y += dy * currentSpeed;
+
+        // 마우스 방향 조준
+        const screenX = this.x - camera.x;
+        const screenY = this.y - camera.y;
+        this.angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
+
+        // UI 업데이트
+        hpBar.style.width = `${(this.hp / this.maxHp) * 100}%`;
+        stmBar.style.width = `${(this.stamina / this.maxStamina) * 100}%`;
+        ammoText.innerText = this.ammo;
+        killText.innerText = `KILLS: ${kills}`;
+
+        // 사망 처리
+        if (this.hp <= 0 && !isGameOver) {
+            triggerGameOver();
+        }
+    },
+
+    shoot() {
+        if (this.ammo > 0) {
+            this.ammo--;
+            const tipX = this.x + Math.cos(this.angle) * 25;
+            const tipY = this.y + Math.sin(this.angle) * 25;
+            bullets.push(new Bullet(tipX, tipY, this.angle));
+            
+            // 총소리 소음으로 인한 주변 좀비 어그로 (간단한 파문 효과)
+            zombies.forEach(z => {
+                const dist = Math.hypot(this.x - z.x, this.y - z.y);
+                if (dist < 500) z.alerted = true;
+            });
+        }
+    },
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - camera.x, this.y - camera.y);
+        ctx.rotate(this.angle);
+
+        // 손전등 / 시야 효과 (조준 방향으로 밝은 빛)
+        let gradient = ctx.createRadialGradient(0, 0, 10, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(255, 255, 200, 0.15)');
+        gradient.addColorStop(1, 'rgba(255, 255, 200, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 300, -0.6, 0.6);
+        ctx.closePath();
+        ctx.fill();
+
+        // 플레이어 몸통
+        ctx.fillStyle = '#3498db';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 플레이어 손/총
+        ctx.fillStyle = '#f39c12';
+        ctx.fillRect(10, -6, 20, 12);
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(20, -3, 15, 6);
+
+        ctx.restore();
+    }
+};
+
+// 총알 클래스
+class Bullet {
+    constructor(x, y, angle) {
+        this.x = x;
+        this.y = y;
+        this.vx = Math.cos(angle) * 16;
+        this.vy = Math.sin(angle) * 16;
+        this.radius = 3;
+        this.distanceTraveled = 0;
+        this.maxRange = 600;
+    }
+
+    update(index) {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.distanceTraveled += 16;
+
+        if (this.distanceTraveled > this.maxRange) {
+            bullets.splice(index, 1);
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath();
+        ctx.arc(this.x - camera.x, this.y - camera.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// 좀비 클래스
+class Zombie {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 16;
+        this.speed = Math.random() * 1.2 + 1.0; // 개체별 랜덤 이동속도
+        this.hp = 30;
+        this.angle = 0;
+        this.alerted = false;
+        this.attackCooldown = 0;
+    }
+
+    update(index) {
+        const distToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+
+        // 일정 거리 이내거나 소음에 어그로가 끌리면 플레이어 추격
+        if (distToPlayer < 350 || this.alerted) {
+            this.alerted = true;
+            this.angle = Math.atan2(player.y - this.y, player.x - this.x);
+            this.x += Math.cos(this.angle) * this.speed;
+            this.y += Math.sin(this.angle) * this.speed;
+        }
+
+        // 플레이어 공격 (접촉 시)
+        if (distToPlayer < this.radius + player.radius) {
+            if (this.attackCooldown <= 0) {
+                player.hp = Math.max(0, player.hp - 15);
+                this.attackCooldown = 60; // 1초 쿨타임 (60프레임 기준)
+                addBlood(player.x, player.y, 5);
+            }
+        }
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+
+        // 총알 충돌 판정
+        bullets.forEach((bullet, bIndex) => {
+            const dist = Math.hypot(bullet.x - this.x, bullet.y - this.y);
+            if (dist < this.radius + bullet.radius) {
+                this.hp -= 15;
+                this.alerted = true;
+                addBlood(this.x, this.y, 8);
+                bullets.splice(bIndex, 1);
+
+                // 좀비 사망
+                if (this.hp <= 0) {
+                    addBlood(this.x, this.y, 25); // 사망 시 큰 피 흔적
+                    
+                    // 30% 확률로 아이템 드롭
+                    if (Math.random() < 0.3) {
+                        items.push(new Item(this.x, this.y, Math.random() < 0.5 ? 'medkit' : 'ammo'));
+                    }
+                    
+                    zombies.splice(index, 1);
+                    kills++;
+                }
+            }
+        });
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - camera.x, this.y - camera.y);
+        ctx.rotate(this.angle);
+
+        // 좀비 몸통 (녹색 계열)
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 좀비 팔 (앞으로 뻗은 모습)
+        ctx.fillStyle = '#1e8449';
+        ctx.fillRect(5, -14, 15, 6);
+        ctx.fillRect(5, 8, 15, 6);
+
+        ctx.restore();
+    }
+}
+
+// 아이템 클래스 (파밍 요소)
+class Item {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // 'medkit' 또는 'ammo'
+        this.radius = 12;
+    }
+
+    update(index) {
+        const dist = Math.hypot(player.x - this.x, player.y - this.y);
+        if (dist < player.radius + this.radius) {
+            if (this.type === 'medkit') {
+                player.hp = Math.min(player.maxHp, player.hp + 30);
+            } else if (this.type === 'ammo') {
+                player.ammo += 12;
+            }
+            items.splice(index, 1);
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - camera.x, this.y - camera.y);
+        
+        if (this.type === 'medkit') {
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillRect(-8, -8, 16, 16);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-2, -6, 4, 12);
+            ctx.fillRect(-6, -2, 12, 4);
+        } else {
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath();
+            ctx.arc(0, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#d4ac0d';
+            ctx.fillRect(-4, -4, 8, 8);
+        }
+        
+        ctx.restore();
+    }
+}
+
+// 혈흔 효과 (바닥에 영구적으로 남음 - 좀보이드 느낌)
+const bloodStains = [];
+function addBlood(x, y, count) {
+    for (let i = 0; i < count; i++) {
+        bloodStains.push({
+            x: x + (Math.random() - 0.5) * 30,
+            y: y + (Math.random() - 0.5) * 30,
+            radius: Math.random() * 4 + 2,
+            alpha: Math.random() * 0.5 + 0.3
+        });
+    }
+    // 혈흔이 너무 많아지면 오래된 것부터 삭제 (최적화)
+    if (bloodStains.length > 500) bloodStains.splice(0, count);
+}
+
+// 게임 엔티티 배열
+let bullets = [];
+let zombies = [];
+let items = [];
+
+// 좀비 스폰 시스템 (플레이어 주변 화면 밖에서 생성)
+function spawnZombie() {
+    if (zombies.length < 35 && !isGameOver) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * 300 + 600; // 화면 밖 거리
+        const x = player.x + Math.cos(angle) * dist;
+        const y = player.y + Math.sin(angle) * dist;
+        zombies.push(new Zombie(x, y));
+    }
+}
+setInterval(spawnZombie, 1000);
+
+// 배경 그리드 (아스팔트/바닥 느낌)
+function drawGrid() {
+    const gridSize = 50;
+    const offsetX = -camera.x % gridSize;
+    const offsetY = -camera.y % gridSize;
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+
+    for (let x = offsetX; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = offsetY; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+}
+
+// 게임 오버 처리
+function triggerGameOver() {
+    isGameOver = true;
+    finalStats.innerText = `생존 중 처치한 좀비: ${kills}마리`;
+    gameOverScreen.style.display = 'flex';
+}
+
+// 게임 재시작
+function restartGame() {
+    isGameOver = false;
+    player.hp = player.maxHp;
+    player.stamina = player.maxStamina;
+    player.ammo = 15;
+    player.x = 0;
+    player.y = 0;
+    kills = 0;
+    bullets = [];
+    zombies = [];
+    items = [];
+    bloodStains.length = 0;
+    gameOverScreen.style.display = 'none';
+}
+
+// 초기 아이템 배치
+for (let i = 0; i < 5; i++) {
+    items.push(new Item((Math.random() - 0.5) * 800, (Math.random() - 0.5) * 800, 'ammo'));
+    items.push(new Item((Math.random() - 0.5) * 800, (Math.random() - 0.5) * 800, 'medkit'));
+}
+
+// 메인 게임 루프
+function animate() {
+    requestAnimationFrame(animate);
+
+    // 카메라가 플레이어를 중앙에 맞추도록 부드럽게 추적
+    camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
+    camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
+
+    // 화면 지우기 (배경색)
+    ctx.fillStyle = '#1e272e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    drawGrid();
+
+    // 혈흔 렌더링 (바닥 레이어)
+    bloodStains.forEach(blood => {
+        ctx.fillStyle = `rgba(139, 0, 0, ${blood.alpha})`;
+        ctx.beginPath();
+        ctx.arc(blood.x - camera.x, blood.y - camera.y, blood.radius, 0, Math.PI * 2);
+        ctx.fill();
     });
 
-    // 벽 (장애물 - 시야를 가리고 소음을 일부 차단)
-    const walls = [
-      { x: 150, y: 100, w: 20, h: 250 }, { x: 170, y: 100, w: 150, h: 20 },
-      { x: 450, y: 150, w: 200, h: 20 }, { x: 450, y: 170, w: 20, h: 180 },
-      { x: 200, y: 450, w: 300, h: 20 }, { x: 500, y: 400, w: 20, h: 150 },
-      { x: 50, y: 350, w: 80, h: 20 }
-    ];
-
-    // 플레이어 객체
-    const player = {
-      x: 400, y: 300, radius: 16, speed: 2.2,
-      hp: 100, maxHp: 100, stamina: 100, maxStamina: 100,
-      angle: 0, noiseRadius: 0,
-      isAttack: false, attackAngle: 0, attackTimer: 0, attackCooldown: 0,
-      panic: 0, isBleeding: false,
-
-      update() {
-        // 1. 마우스 바라보기 (패닉 시 수전증으로 조준이 미세하게 떨림)
-        const jitter = this.panic > 0 ? (Math.random() - 0.5) * 0.15 : 0;
-        this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x) + jitter;
-
-        // 2. 이동 및 스태미나 (Shift 달리기)
-        let moveSpeed = this.speed;
-        const isSprinting = (keys['shiftleft'] || keys['shiftright']) && this.stamina > 0;
-        
-        if (isSprinting && (keys['keyw'] || keys['keys'] || keys['keya'] || keys['keyd'])) {
-          moveSpeed *= 1.8;
-          this.stamina = Math.max(0, this.stamina - 0.4);
-          this.noiseRadius = 180; // 달리면 발소리 소음 확산!
-        } else {
-          this.stamina = Math.min(this.maxStamina, this.stamina + 0.2);
-          this.noiseRadius = (keys['keyw'] || keys['keys'] || keys['keya'] || keys['keyd']) ? 55 : 10;
-        }
-
-        // 지침(Exhausted) 모들 발동 시 이동 속도 40% 저하
-        if (this.stamina < 25) moveSpeed *= 0.6;
-
-        let nextX = this.x, nextY = this.y;
-        if (keys['keyw']) nextY -= moveSpeed;
-        if (keys['keys']) nextY += moveSpeed;
-        if (keys['keya']) nextX -= moveSpeed;
-        if (keys['keyd']) nextX += moveSpeed;
-
-        // 벽 충돌 체크
-        if (!checkWallCollide(nextX, this.y, this.radius)) this.x = nextX;
-        if (!checkWallCollide(this.x, nextY, this.radius)) this.y = nextY;
-
-        // 3. 공격 처리 (야구 빠따)
-        if (this.attackCooldown > 0) this.attackCooldown--;
-        if (this.isAttack) {
-          this.attackTimer--;
-          this.noiseRadius = 140; // 무기 휘두르면 소음 발생!
-          if (this.attackTimer <= 0) this.isAttack = false;
-        }
-
-        // 4. 출혈 상태
-        if (this.isBleeding) {
-          this.hp Math.max(0, this.hp - 0.05);
-          if (Math.random() < 0.1) bloodStains.push({ x: this.x, y: this.y, size: 3 });
-        }
-
-        // UI 모들 업데이트
-        document.getElementById('moodle-tired').style.display = (this.stamina < 25) ? 'block' : 'none';
-        document.getElementById('moodle-panic').style.display = (this.panic > 0) ? 'block' : 'none';
-        document.getElementById('moodle-bleed').style.display = (this.isBleeding) ? 'block' : 'none';
-        document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + '%';
-        document.getElementById('stm-bar').style.width = (this.stamina / this.maxStamina * 100) + '%';
-
-        if (this.hp <= 0) {
-          alert("💀 사망했습니다! 당신은 좀비의 밥이 되었습니다.");
-          location.reload();
-        }
-      },
-
-      attack() {
-        if (this.attackCooldown > 0 || this.stamina < 10) return;
-        this.isAttack = true;
-        this.attackTimer = 12; // 공격 지속 프레임
-        this.attackCooldown = (this.stamina < 25) ? 45 : 25; // 지치면 공격 쿨타임 증가
-        this.attackAngle = this.angle;
-        this.stamina -= 8;
-
-        // 범위 내 좀비 타격 판정
-        zombies.forEach(z => {
-          const dist = Math.hypot(z.x - this.x, z.y - this.y);
-          const angleToZ = Math.atan2(z.y - this.y, z.x - this.x);
-          const diff = Math.abs(normalizeAngle(angleToZ - this.attackAngle));
-          
-          if (dist < 65 && diff < Math.PI * 0.35) {
-            z.hp -= 35;
-            // 넉백 (밀쳐내기)
-            z.x += Math.cos(this.attackAngle) * 25;
-            z.y += Math.sin(this.attackAngle) * 25;
-            for(let i=0; i<5; i++) bloodStains.push({ x: z.x + (Math.random()-0.5)*20, y: z.y + (Math.random()-0.5)*20, size: Math.random()*6+2 });
-          }
-        });
-      }
-    };
-
-    canvas.addEventListener('mousedown', () => player.attack());
-
-    // 좀비 생성 (유한 상태 기계 FSM 로직)
-    const zombies = [
-      { x: 100, y: 80, hp: 100, state: 'IDLE', speed: 1.2 },
-      { x: 650, y: 100, hp: 100, state: 'IDLE', speed: 1.5 },
-      { x: 700, y: 500, hp: 100, state: 'IDLE', speed: 1.3 },
-      { x: 300, y: 500, hp: 100, state: 'IDLE', speed: 1.1 },
-      { x: 500, y: 300, hp: 100, state: 'IDLE', speed: 1.6 },
-      { x: 80, y: 400, hp: 100, state: 'IDLE', speed: 1.4 }
-    ];
-
-    function updateZombies() {
-      let nearbyZombies = 0;
-
-      zombies.forEach((z, idx) => {
-        if (z.hp <= 0) {
-          for(let i=0; i<15; i++) bloodStains.push({ x: z.x + (Math.random()-0.5)*40, y: z.y + (Math.random()-0.5)*40, size: Math.random()*8+3 });
-          zombies.splice(idx, 1);
-          return;
-        }
-
-        const distToPlayer = Math.hypot(player.x - z.x, player.y - z.y);
-        if (distToPlayer < 120) nearbyZombies++;
-
-        // [FSM 상태 전환 로직]
-        // 1. 소음 감지: 플레이어의 소음 반경 안에 들어오면 즉시 추적(CHASE)
-        if (distToPlayer < player.noiseRadius) {
-          z.state = 'CHASE';
-        }
-        // 2. 시야 감지: 좀비 시선 앞 180px 안에 플레이어가 있고, 벽에 가려지지 않았다면 추적
-        else if (distToPlayer < 180 && checkLineOfSight(z.x, z.y, player.x, player.y)) {
-          z.state = 'CHASE';
-        }
-
-        // [상태별 행동]
-        if (z.state === 'CHASE') {
-          const angle = Math.atan2(player.y - z.y, player.x - z.x);
-          let nextX = z.x + Math.cos(angle) * z.speed;
-          let nextY = z.y + Math.sin(angle) * z.speed;
-
-          if (!checkWallCollide(nextX, z.y, 14)) z.x = nextX;
-          if (!checkWallCollide(z.x, nextY, 14)) z.y = nextY;
-
-          // 플레이어를 공격 (물기)
-          if (distToPlayer < player.radius + 14) {
-            player.hp -= 0.5;
-            if (Math.random() < 0.05) player.isBleeding = true; // 5% 확률로 출혈 감염!
-          }
-        } else if (z.state === 'IDLE') {
-          // 어슬렁거리기 (랜덤 배회)
-          if (Math.random() < 0.02) {
-            z.wandX = z.x + (Math.random() - 0.5) * 60;
-            z.wandY = z.y + (Math.random() - 0.5) * 60;
-          }
-          if (z.wandX) {
-            z.x += (z.wandX - z.x) * 0.02;
-            z.y += (z.wandY - z.y) * 0.02;
-          }
-        }
-      });
-
-      // 주변에 좀비가 2마리 이상 접근하면 극심한 공포(Panic) 발동!
-      player.panic = (nearbyZombies >= 2) ? 1 : 0;
+    if (!isGameOver) {
+        player.update();
     }
 
-    // ==========================================
-    // 💡 핵심 알고리즘: 레이캐스팅 & 충돌 연산
-    // ==========================================
-    function checkWallCollide(x, y, radius) {
-      return walls.some(w => x + radius > w.x && x - radius < w.x + w.w && y + radius > w.y && y - radius < w.y + w.h);
+    // 아이템 업데이트 및 렌더링
+    items.forEach((item, index) => {
+        item.update(index);
+        item.draw();
+    });
+
+    // 총알 업데이트 및 렌더링
+    bullets.forEach((bullet, index) => {
+        bullet.update(index);
+        bullet.draw();
+    });
+
+    // 좀비 업데이트 및 렌더링
+    zombies.forEach((zombie, index) => {
+        if (!isGameOver) zombie.update(index);
+        zombie.draw();
+    });
+
+    // 플레이어 렌더링
+    if (!isGameOver) {
+        player.draw();
     }
 
-    function checkLineOfSight(x1, y1, x2, y2) {
-      const dist = Math.hypot(x2 - x1, y2 - y1);
-      const steps = dist / 8;
-      for (let i = 1; i <= steps; i++) {
-        const rx = x1 + (x2 - x1) * (i / steps);
-        const ry = y1 + (y2 - y1) * (i / steps);
-        if (walls.some(w => rx > w.x && rx < w.x + w.w && ry > w.y && ry < w.y + w.h)) return false;
-      }
-      return true;
-    }
+    // 어둠/어스름한 분위기 효과 (비네팅 느낌의 투명 레이어)
+    let vignette = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.2,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.7
+    );
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
 
-    function normalizeAngle(a) {
-      while (a > Math.PI) a -= Math.PI * 2;
-      while (a < -Math.PI) a += Math.PI * 2;
-      return a;
-    }
-
-    // 💡 광선 추적(Raycasting)으로 벽에 부딪히는 시야 끝점 찾기
-    function castRay(x, y, angle, maxDist) {
-      const cos = Math.cos(angle), sin = Math.sin(angle);
-      for (let d = 0; d < maxDist; d += 5) {
-        const rx = x + cos * d, ry = y + sin * d;
-        if (walls.some(w => rx >= w.x && rx <= w.x + w.w && ry >= w.y && ry <= w.y + w.h)) {
-          return { x: rx, y: ry };
-        }
-      }
-      return { x: x + cos * maxDist, y: y + sin * maxDist };
-    }
-
-    // 좀비가 플레이어의 시야(FOV) 안에 있는지 검사 (시선 가림 & 각도)
-    function isZombieVisible(z) {
-      const dist = Math.hypot(z.x - player.x, z.y - player.y);
-      if (dist < 50) return true; // 50px 이내는 360도 소리/감각으로 근접 감지 (좀보이드 규칙!)
-      if (dist > 280) return false;
-
-      const angleToZ = Math.atan2(z.y - player.y, z.x - player.x);
-      const diff = Math.abs(normalizeAngle(angleToZ - player.angle));
-      
-      // 패닉(Panic) 상태일 때는 시야각이 108도에서 60도로 대폭 찌그러짐!
-      const currentFov = player.panic > 0 ? Math.PI * 0.33 : Math.PI * 0.6;
-      if (diff > currentFov / 2) return false;
-
-      return checkLineOfSight(player.x, player.y, z.x, z.y);
-    }
-
-    // ==========================================
-    // 🎨 게임 그래픽 렌더링
-    // ==========================================
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // 1. 바닥 피흔적 (영구 보존)
-      ctx.fillStyle = "#800000";
-      bloodStains.forEach(b => {
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // 2. 벽 그리기
-      walls.forEach(w => {
-        ctx.fillStyle = "#444";
-        ctx.fillRect(w.x, w.y, w.w, w.h);
-        ctx.strokeStyle = "#111"; ctx.lineWidth = 2;
-        ctx.strokeRect(w.x, w.y, w.w, w.h);
-      });
-
-      // 3. 좀비 그리기 (💡 시야(FOV) 안에 들어온 좀비만 렌더링!)
-      zombies.forEach(z => {
-        if (isZombieVisible(z)) {
-          ctx.beginPath();
-          ctx.arc(z.x, z.y, 14, 0, Math.PI * 2);
-          ctx.fillStyle = (z.state === 'CHASE') ? "#2ed573" : "#26a65b"; // 추적 중이면 밝은 초록색
-          ctx.fill();
-          ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke();
-          
-          // 눈 (바라보는 방향)
-          ctx.fillStyle = "#ff0000";
-          ctx.beginPath();
-          ctx.arc(z.x, z.y - 4, 3, 0, Math.PI * 2);
-          ctx.arc(z.x, z.y + 4, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
-
-      // 4. 플레이어 그리기
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-      ctx.fillStyle = "#3742fa"; ctx.fill();
-      ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke();
-
-      // 플레이어 방향 표시 (손/무기)
-      const handX = player.x + Math.cos(player.angle) * 16;
-      const handY = player.y + Math.sin(player.angle) * 16;
-      ctx.beginPath();
-      ctx.arc(handX, handY, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#f1c40f"; ctx.fill();
-
-      // 야구 빠따 공격 모션
-      if (player.isAttack) {
-        ctx.beginPath();
-        ctx.moveTo(player.x, player.y);
-        ctx.arc(player.x, player.y, 65, player.attackAngle - 0.5, player.attackAngle + 0.5);
-        ctx.fillStyle = "rgba(241, 196, 15, 0.4)";
-        ctx.fill();
-      }
-
-      // 5. 💡 그림자 & 시야각(FOV) 레이캐스팅 오버레이 렌더링
-      sCtx.clearRect(0, 0, canvas.width, canvas.height);
-      sCtx.fillStyle = "rgba(8, 8, 12, 0.92)"; // 92% 칠흑 같은 어둠
-      sCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // 시야 광선(Ray)으로 밝은 영역 오프스크린 캔버스에서 뚫어내기 (destination-out)
-      sCtx.globalCompositeOperation = 'destination-out';
-      
-      // (1) 근접 감각 시야 (360도 50px - 내 바로 주변은 어둠 속에서도 잘 보임)
-      sCtx.beginPath();
-      sCtx.arc(player.x, player.y, 55, 0, Math.PI * 2);
-      sCtx.fill();
-
-      // (2) 전방 부채꼴 시야 (Raycasting Polygon)
-      sCtx.beginPath();
-      sCtx.moveTo(player.x, player.y);
-      const currentFov = player.panic > 0 ? Math.PI * 0.33 : Math.PI * 0.6;
-      const rayCount = 80; // 광선 80개 발사
-      const startAngle = player.angle - currentFov / 2;
-      const stepAngle = currentFov / rayCount;
-
-      for (let i = 0; i <= rayCount; i++) {
-        const hit = castRay(player.x, player.y, startAngle + stepAngle * i, 280);
-        sCtx.lineTo(hit.x, hit.y);
-      }
-      sCtx.closePath();
-      sCtx.fill();
-      sCtx.globalCompositeOperation = 'source-over';
-
-      // 완성된 그림자 오버레이를 메인 화면에 덮어씌우기
-      ctx.drawImage(shadowCanvas, 0, 0);
-
-      // 6. 소음 반경 UI (어둠 위쪽에 연한 선으로 표시해 플레이어에게 경고)
-      if (player.noiseRadius > 20) {
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, player.noiseRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = (player.noiseRadius > 100) ? "rgba(255, 71, 87, 0.4)" : "rgba(255, 255, 255, 0.15)";
-        ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
-    function gameLoop() {
-      player.update();
-      updateZombies();
-      draw();
-      requestAnimationFrame(gameLoop);
-    }
-
-    gameLoop();
-  </script>
+animate();
+</script>
 </body>
 </html>
