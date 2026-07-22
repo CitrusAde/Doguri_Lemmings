@@ -323,12 +323,25 @@ const player = {
                 
                 const renderHeight = renderWidth;
                 
+                // ★ [추가된 부분 1] 이미지를 그리기 전에 각도를 계산해서 세로 비율을 강제로 늘려줌!
+                ctx.save(); 
+                const verticalFactor = Math.abs(Math.sin(this.direction)); 
+                
+                // 👉 이 '0.6' 수치를 조절하시면 됩니다! (0.5 ~ 0.8 추천)
+                const stretchIntensity = 0.8; 
+                const scaleY = 1.0 + (verticalFactor * stretchIntensity);
+                ctx.scale(1.0, scaleY); 
+                // -----------------------------------------------------------
+
                 ctx.drawImage(
                     img,
                     col * frameWidth, row * frameHeight, frameWidth, frameHeight,
                     -renderWidth * 0.5, -renderHeight * 0.5, 
                     renderWidth, renderHeight
                 );
+
+                // ★ [추가된 부분 2] 늘려준 비율을 다시 원래대로 되돌림
+                ctx.restore(); 
             }
         }
         ctx.restore();
